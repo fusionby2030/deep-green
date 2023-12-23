@@ -85,50 +85,71 @@ contains
 
    !only for double 8 and same 3D shape for all arrays
    !Credits to https://gist.github.com/dmentipl/ed609e7278050bd6de0016c09155e039
-   subroutine add_field_h5(id, name, field)
-      use hdf5
+   subroutine add_field_h5(id, name, x, error, compression_level)
       use types_and_kinds
-      implicit none
-      real(rk), dimension(:, :, :), intent(in) :: field
-      character(len=*), intent(in) :: name
-      integer(hid_t), intent(in) :: id
-      integer :: error
+      use hdf5
+      real(rk), intent(in)  :: x(:, :, :)
+      character(*), intent(in)  :: name
+      integer(hid_t), intent(in)  :: id
+      integer(4), intent(in)::compression_level
+      integer, intent(out) :: error
 
       integer, parameter :: ndims = 3
-      integer(hsize_t)   :: data_shape(ndims)
+      integer(hsize_t)   :: xshape(ndims)
       integer(hsize_t)   :: chunk(ndims)
       integer(hid_t)     :: dspace_id
       integer(hid_t)     :: dset_id
+      integer(hid_t)     :: prop_id
       integer(hid_t)     :: dtype_id
 
-      data_shape = shape(field)
-      chunk = shape(field)
-      dtype_id = H5T_NATIVE_DOUBLE
+      xshape = shape(x)
+      chunk = shape(x)
+      dtype_id = h5t_native_double
 
-      call h5screate_f(h5s_scalar_f, dspace_id, error)
+      ! create dataspace
+      call h5screate_simple_f(ndims, xshape, dspace_id, error)
       if (error /= 0) then
          write (*, '("cannot create hdf5 dataspace",/)')
          return
       end if
 
-      call h5dcreate_f(id, name, dtype_id, dspace_id, dset_id, error)
+      call h5pcreate_f(h5p_dataset_create_f, prop_id, error)
+      call h5pset_deflate_f(prop_id, compression_level, error)
+      call h5pset_chunk_f(prop_id, ndims, chunk, error)
+      if (error /= 0) then
+         write (*, '("cannot create hdf5 property list",/)')
+         return
+      end if
+
+      ! create dataset in file
+      call h5dcreate_f(id, name, dtype_id, dspace_id, dset_id, error, prop_id)
       if (error /= 0) then
          write (*, '("cannot create hdf5 dataset",/)')
          return
       end if
 
-      call h5dwrite_f(dset_id, dtype_id, field, data_shape, error)
+      ! write to file
+      call h5dwrite_f(dset_id, dtype_id, x, xshape, error)
       if (error /= 0) then
          write (*, '("cannot write to hdf5 file",/)')
          return
       end if
 
+      ! close property list
+      call h5pclose_f(prop_id, error)
+      if (error /= 0) then
+         write (*, '("cannot close hdf5 property list",/)')
+         return
+      end if
+
+      ! close dataset
       call h5dclose_f(dset_id, error)
       if (error /= 0) then
          write (*, '("cannot close hdf5 dataset",/)')
          return
       end if
 
+      ! close dataspace
       call h5sclose_f(dspace_id, error)
       if (error /= 0) then
          write (*, '("cannot close hdf5 dataspace",/)')
@@ -222,7 +243,7 @@ contains
 
    end subroutine close_hdf5file
 
-   subroutine write_state(tstep, rho, vx, vy, vz, p, &
+   subroutine write_state(time, tstep, rho, vx, vy, vz, p, &
                           mass, momentum_x, momentum_y, &
                           momentum_z, energy, temp)
       use hdf5
@@ -232,46 +253,28 @@ contains
                                                   mass, momentum_x, momentum_y, &
                                                   momentum_z, energy, temp
       integer(ik), intent(in) :: tstep
+      real(rk), intent(in) :: time
+      integer(4):: compression_level = 0
       character(32) :: fname
       integer(hid_t) :: file_id
       integer:: error
       write (fname, '(a,"000",i7.7,a)') "state.", tstep, ".h5"
       call create_hdf5file(fname, file_id, error)
       call open_hdf5file(fname, file_id, error)
-      call add_field_h5(file_id, "rho", rho)
-      call add_field_h5(file_id, "vx", vx)
-      call add_field_h5(file_id, "vy", vy)
-      call add_field_h5(file_id, "vz", vz)
-      call add_field_h5(file_id, "p", p)
-      call add_field_h5(file_id, "mass", mass)
-      call add_field_h5(file_id, "momentum_x", momentum_x)
-      call add_field_h5(file_id, "momentum_y", momentum_y)
-      call add_field_h5(file_id, "momentum_z", momentum_z)
-      call add_field_h5(file_id, "energy", energy)
-      call add_field_h5(file_id, "temperature", temp)
+      !call write_real_kind8(file_id, "time", time, error)
+      call add_field_h5(file_id, "rho", rho, error, compression_level)
+      call add_field_h5(file_id, "vx", vx, error, compression_level)
+      call add_field_h5(file_id, "vy", vy, error, compression_level)
+      call add_field_h5(file_id, "vz", vz, error, compression_level)
+      call add_field_h5(file_id, "p", p, error, compression_level)
+      call add_field_h5(file_id, "mass", mass, error, compression_level)
+      call add_field_h5(file_id, "momentum_x", momentum_x, error, compression_level)
+      call add_field_h5(file_id, "momentum_y", momentum_y, error, compression_level)
+      call add_field_h5(file_id, "momentum_z", momentum_z, error, compression_level)
+      call add_field_h5(file_id, "energy", energy, error, compression_level)
+      call add_field_h5(file_id, "temperature", temp, error, compression_level)
       call close_hdf5file(file_id, error)
    end subroutine write_state
-
-   subroutine write_conserved(tstep, mass, momentum_x, momentum_y, momentum_z, energy, temp)
-      use hdf5
-      use types_and_kinds
-      implicit none
-      real(rk), dimension(:, :, :), intent(in) :: mass, momentum_x, momentum_y, momentum_z, energy, temp
-      integer(ik), intent(in) :: tstep
-      character(32) :: fname
-      integer(hid_t) :: file_id
-      integer:: error
-      write (fname, '(a,"000",i7.7,a)') "primitives.", tstep, ".h5"
-      call create_hdf5file(fname, file_id, error)
-      call open_hdf5file(fname, file_id, error)
-      call add_field_h5(file_id, "mass", mass)
-      call add_field_h5(file_id, "momentum_x", momentum_x)
-      call add_field_h5(file_id, "momentum_y", momentum_y)
-      call add_field_h5(file_id, "momentum_z", momentum_z)
-      call add_field_h5(file_id, "energy", energy)
-      call add_field_h5(file_id, "temperature", temp)
-      call close_hdf5file(file_id, error)
-   end subroutine write_conserved
 
 end module io
 
@@ -704,7 +707,7 @@ program euler_cfd
                      mass, momentum_x, momentum_y, momentum_z, energy, &
                      nx, ny, nz, nGhosts, dt, ds)
 
-      call write_state(timestep, rho, vx, vy, vz, p, &
+      call write_state(time, timestep, rho, vx, vy, vz, p, &
                        mass, momentum_x, momentum_y, &
                        momentum_z, energy, temp)
       print *, "Time=", time, "dt=", dt
