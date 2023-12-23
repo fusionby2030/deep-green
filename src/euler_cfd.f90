@@ -2,7 +2,7 @@
 ! Authors: Adam Kit and Kostis Papadakis (2023)
 ! Program: euler_cfd
 ! Solving the compressible Euler equations in 3 dimensions using the Lax–Friedrichs
-! flux method.
+! flux method. Stable for CFL<0.4.
 ! TODO:
 ! --Add a flux limiter using a high order reconstruction : probably use Lax–Wendroff for
 ! F_{h}
@@ -19,6 +19,8 @@ module global
    use types_and_kinds
    implicit none
    real(rk), parameter :: gamma = 5.0_rk/3.0_rk, rs = 287.0_rk, cfl = 0.2_rk
+   integer(rk), parameter:: N_VARS = 5, N_FLUX = 15, N_DIMS = 3
+   integer(4), parameter:: PERIODIC = 0, OUTFLOW = 1, WALL = 2, INFLOW = 3
 end module global
 
 module initialization
@@ -298,13 +300,13 @@ contains
       temp = p/(rs*rho) - 273.15_rk
    end subroutine conservative
 
-   real(rk) function get_timestep(ds, vx, vy, vz, p, rho)
+   real(rk) function compute_timestep(ds, vx, vy, vz, p, rho)
       real(rk), intent(in) :: ds
       real(rk), intent(in), dimension(:, :, :) :: vx, vy, vz, p, rho
-      get_timestep = minval(cfl*ds/sqrt((gamma*p/rho) + (vx**2 + vy**2 + vz**2)))
+      compute_timestep = minval(cfl*ds/sqrt((gamma*p/rho) + (vx**2 + vy**2 + vz**2)))
       ! todo: double check this
-      ! get_timestep = minval(cfl*ds/(sqrt(gamma*p/rho) + sqrt(vx**2 + vy**2 + vz**2)) )
-   end function get_timestep
+      ! compute_timestep = minval(cfl*ds/(sqrt(gamma*p/rho) + sqrt(vx**2 + vy**2 + vz**2)) )
+   end function compute_timestep
 
    subroutine primitive(mass, momentum_x, momentum_y, momentum_z, energy, rho, p, vx, vy, vz, temp, ds)
       real(rk), dimension(:, :, :), intent(in) :: mass, momentum_x, momentum_y, momentum_z, energy
@@ -320,9 +322,9 @@ contains
       temp = p/(rs*rho) - 273.15_rk
    end subroutine primitive
 
-   subroutine extrapolateprimitves(rho, vx, vy, vz, p, drho_dx, drho_dy, drho_dz, dvx_dx, dvx_dy, &
-                                   dvx_dz, dvy_dx, dvy_dy, dvy_dz, dvz_dx, dvz_dy, dvz_dz, &
-                                   dp_dx, dp_dy, dp_dz, rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr, dt)
+   subroutine extrapolate_primitves(rho, vx, vy, vz, p, drho_dx, drho_dy, drho_dz, dvx_dx, dvx_dy, &
+                                    dvx_dz, dvy_dx, dvy_dy, dvy_dz, dvz_dx, dvz_dy, dvz_dz, &
+                                    dp_dx, dp_dy, dp_dz, rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr, dt)
       use types_and_kinds
       implicit none
       real(rk), dimension(:, :, :), intent(in) :: rho, vx, vy, vz, p, drho_dx, drho_dy, drho_dz, &
@@ -337,7 +339,7 @@ contains
       vy_xtr = vy - 0.5*dt*(vx*dvy_dx + vy*dvy_dy + vz*dvy_dz + (1.0/rho)*dp_dy); 
       vz_xtr = vz - 0.5*dt*(vx*dvz_dx + vy*dvz_dy + vz*dvz_dz + (1.0/rho)*dp_dz); 
       p_xtr = p - 0.5*dt*(gamma*p*(dvx_dx + dvy_dy + dvz_dz) + vx*dp_dx + vy*dp_dy + vz*dp_dz); 
-   end subroutine extrapolateprimitves
+   end subroutine extrapolate_primitves
 
    subroutine reconstructflux(mass_flux_x, momentum_x_flux_x, momentum_y_flux_x, &
                               momentum_z_flux_x, energy_flux_x, &
@@ -506,25 +508,46 @@ contains
       end do
    end subroutine calculate_gradients
 
-   subroutine update_ghosts(grid, nx, ny, nz, nGhosts)
+   subroutine update_ghosts(grid, nx, ny, nz, nGhosts, BCs)
       use types_and_kinds
       implicit none
       real(rk), dimension(:, :, :), intent(inout) :: grid
+      integer(4), intent(in) :: BCs(6)
       integer(ik), intent(in) :: nx, ny, nz, nGhosts
-      grid(1, :, :) = grid(3, :, :)
-      grid(2, :, :) = grid(3, :, :)
-      grid(nx - 1, :, :) = grid(nx - nGhosts, :, :)
-      grid(nx, :, :) = grid(nx - nGhosts, :, :)
+      integer(4):: done_x,done_y,done_z
 
-      grid(:, 1, :) = grid(:, 3, :)
-      grid(:, 2, :) = grid(:, 3, :)
-      grid(:, nx - 1, :) = grid(:, ny - nGhosts, :)
-      grid(:, nx, :) = grid(:, ny - nGhosts, :)
+      done_x=0
+      done_y=0
+      done_z=0
 
-      grid(:, :, 1) = grid(:, :, 3)
-      grid(:, :, 2) = grid(:, :, 3)
-      grid(:, :, nx - 1) = grid(:, :, nz - nGhosts)
-      grid(:, :, nx) = grid(:, :, nz - nGhosts)
+      if (BCs(1)==PERIODIC .and. BCs(2)==PERIODIC) then
+         grid(1, :, :) = grid(3, :, :)
+         grid(2, :, :) = grid(3, :, :)
+         grid(nx - 1, :, :) = grid(nx - nGhosts, :, :)
+         grid(nx, :, :) = grid(nx - nGhosts, :, :)
+         done_x=1
+      endif
+
+      if (BCs(3)==PERIODIC .and. BCs(4)==PERIODIC) then
+         grid(:, 1, :) = grid(:, 3, :)
+         grid(:, 2, :) = grid(:, 3, :)
+         grid(:, nx - 1, :) = grid(:, ny - nGhosts, :)
+         grid(:, nx, :) = grid(:, ny - nGhosts, :)
+         done_y=1
+      endif
+
+      if (BCs(5)==PERIODIC .and. BCs(6)==PERIODIC) then
+         grid(:, :, 1) = grid(:, :, 3)
+         grid(:, :, 2) = grid(:, :, 3)
+         grid(:, :, nx - 1) = grid(:, :, nz - nGhosts)
+         grid(:, :, nx) = grid(:, :, nz - nGhosts)
+         done_z=1
+      endif
+      
+      if (done_x==1 .and. done_y==1 .and. done_z==1) then 
+         return 
+      endif
+
 
       !grid(1,:,:)=grid(nx-nGhosts-1,:,:)
       !grid(2,:,:)=grid(nx-nGhosts,:,:)
@@ -543,6 +566,85 @@ contains
 
    end subroutine update_ghosts
 
+   subroutine update_primitive_ghosts(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, BCs)
+      use types_and_kinds
+      implicit none
+      real(rk), dimension(:, :, :), intent(inout) :: rho, vx, vy, vz, p
+      integer(ik), intent(in) :: nx, ny, nz, nGhosts
+      integer(4), intent(in) :: BCs(6)
+      call update_ghosts(rho, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(vx, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(vy, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(vz, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(p, nx, ny, nz, nGhosts, BCs)
+   end subroutine update_primitive_ghosts
+
+   subroutine update_gradient_ghost(drho_dx, drho_dy, drho_dz, &
+                                    dvx_dx, dvx_dy, dvx_dz, dvy_dx, dvy_dy, dvy_dz, dvz_dx, dvz_dy, dvz_dz, &
+                                    dp_dx, dp_dy, dp_dz, nx, ny, nz, nGhosts, BCs)
+      use types_and_kinds
+      implicit none
+      real(rk), dimension(:, :, :), intent(inout) :: drho_dx, drho_dy, drho_dz, &
+                                                     dvx_dx, dvx_dy, dvx_dz, dvy_dx, dvy_dy, dvy_dz, dvz_dx, dvz_dy, dvz_dz, &
+                                                     dp_dx, dp_dy, dp_dz
+      integer(ik), intent(in) :: nx, ny, nz, nGhosts
+      integer(4), intent(in) :: BCs(6)
+      call update_ghosts(drho_dx, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(drho_dy, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(drho_dz, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(dvx_dx, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(dvx_dy, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(dvx_dz, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(dvy_dx, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(dvy_dy, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(dvy_dz, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(dvz_dx, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(dvz_dy, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(dvz_dz, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(dp_dx, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(dp_dy, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(dp_dz, nx, ny, nz, nGhosts, BCs)
+   end subroutine update_gradient_ghost
+
+   subroutine update_flux_ghost(mass_flux_x, mass_flux_y, mass_flux_z, &
+                                momentum_x_flux_x, momentum_y_flux_x, momentum_z_flux_x, &
+                                momentum_x_flux_y, momentum_y_flux_y, momentum_z_flux_y, &
+                                momentum_x_flux_z, momentum_y_flux_z, momentum_z_flux_z, &
+                                energy_flux_x, energy_flux_y, energy_flux_z, nx, ny, nz, nGhosts, BCs)
+      use types_and_kinds
+      implicit none
+      real(rk), dimension(:, :, :), intent(inout) :: mass_flux_x, mass_flux_y, mass_flux_z, &
+                                                     momentum_x_flux_x, momentum_y_flux_x, momentum_z_flux_x, &
+                                                     momentum_x_flux_y, momentum_y_flux_y, momentum_z_flux_y, &
+                                                     momentum_x_flux_z, momentum_y_flux_z, momentum_z_flux_z, &
+                                                     energy_flux_x, energy_flux_y, energy_flux_z
+      integer(ik), intent(in) :: nx, ny, nz, nGhosts
+      integer(4), intent(in) :: BCs(6)
+      call update_ghosts(mass_flux_x, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(mass_flux_y, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(mass_flux_z, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(momentum_x_flux_x, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(momentum_y_flux_x, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(momentum_z_flux_x, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(momentum_x_flux_y, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(momentum_y_flux_y, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(momentum_z_flux_y, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(momentum_x_flux_z, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(momentum_y_flux_z, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(momentum_z_flux_z, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(energy_flux_x, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(energy_flux_y, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(energy_flux_z, nx, ny, nz, nGhosts, BCs)
+   end subroutine update_flux_ghost
+
+   subroutine apply_boundary_conditions(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, BCs)
+      use types_and_kinds
+      implicit none
+      real(rk), dimension(:, :, :), intent(inout) :: rho, vx, vy, vz, p
+      integer(ik), intent(in) :: nx, ny, nz, nGhosts
+      integer(4), intent(in) :: BCs(6)
+   end subroutine apply_boundary_conditions
+
 end module physics
 
 program euler_cfd
@@ -560,11 +662,14 @@ program euler_cfd
       momentum_y_flux_x, momentum_y_flux_y, momentum_y_flux_z, &
       momentum_z_flux_x, momentum_z_flux_y, momentum_z_flux_z, &
       energy_flux_x, energy_flux_y, energy_flux_z, &
+      !gradients
       drho_dx, drho_dy, drho_dz, &
       dvx_dx, dvx_dy, dvx_dz, &
       dvy_dx, dvy_dy, dvy_dz, &
       dvz_dx, dvz_dy, dvz_dz, &
-      dp_dx, dp_dy, dp_dz, rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr
+      dp_dx, dp_dy, dp_dz, rho_xtr, &
+      ! extrapolated primitives
+      vx_xtr, vy_xtr, vz_xtr, p_xtr
 
    integer(ik), parameter :: xcells = 128, &
                              ycells = 128, &
@@ -573,8 +678,17 @@ program euler_cfd
    integer(ik), parameter :: nx = xcells + 2*nGhosts, ny = ycells + 2*nGhosts, nz = zcells + 2*nGhosts
    real(rk), parameter :: ds = 1.0_rk
    real(rk):: dt = 0.0_rk, time = 0.0_rk, time_max = 1.e-2_rk
-   integer(ik) :: timestep = 1
+   integer(ik) :: timestep = 0
    integer(ik) :: shiftx(3), shifty(3), shiftz(3)
+   integer(4):: BCs(6)
+
+   !Set  boundary conditions
+   BCs(1) = PERIODIC !x-
+   BCs(2) = PERIODIC !x+
+   BCs(3) = PERIODIC !y-
+   BCs(4) = PERIODIC !y-
+   BCs(5) = PERIODIC !z-
+   BCs(6) = PERIODIC !z+
 
    allocate (rho(nx, ny, nz), vx(nx, ny, nz), vy(nx, ny, nz), vz(nx, ny, nz), p(nx, ny, nz), mass(nx, ny, nz), &
              momentum_x(nx, ny, nz), momentum_y(nx, ny, nz), momentum_z(nx, ny, nz), energy(nx, ny, nz), &
@@ -619,24 +733,20 @@ program euler_cfd
    call init_grid(energy_flux_y, nx, ny, nz, nGhosts, 0.0_rk)
    call init_grid(energy_flux_z, nx, ny, nz, nGhosts, 0.0_rk)
 
-   call update_ghosts(rho, nx, ny, nz, nGhosts)
-   call update_ghosts(vx, nx, ny, nz, nGhosts)
-   call update_ghosts(vy, nx, ny, nz, nGhosts)
-   call update_ghosts(vz, nx, ny, nz, nGhosts)
-   call update_ghosts(p, nx, ny, nz, nGhosts)
-
+   call update_primitive_ghosts(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, BCs)
    call conservative(mass, momentum_x, momentum_y, momentum_z, energy, rho, p, vx, vy, vz, temp, ds)
+   call write_state(time, timestep, rho, vx, vy, vz, p, mass, momentum_x, momentum_y, momentum_z, energy, temp)
 
    !main
    do while (time <= time_max)
 
-      call update_ghosts(rho, nx, ny, nz, nGhosts)
-      call update_ghosts(vx, nx, ny, nz, nGhosts)
-      call update_ghosts(vy, nx, ny, nz, nGhosts)
-      call update_ghosts(vz, nx, ny, nz, nGhosts)
-      call update_ghosts(p, nx, ny, nz, nGhosts)
+      call apply_boundary_conditions(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, BCs)
+
+      call update_primitive_ghosts(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, BCs)
+
       call primitive(mass, momentum_x, momentum_y, momentum_z, energy, rho, p, vx, vy, vz, temp, ds)
-      dt = get_timestep(ds, vx, vy, vz, p, rho)
+
+      dt = compute_timestep(ds, vx, vy, vz, p, rho)
 
       call calculate_gradients(rho, drho_dx, drho_dy, drho_dz, nx, ny, nz, nGhosts, ds)
       call calculate_gradients(vx, dvx_dx, dvx_dy, dvx_dz, nx, ny, nz, nGhosts, ds)
@@ -644,32 +754,19 @@ program euler_cfd
       call calculate_gradients(vz, dvz_dx, dvz_dy, dvz_dz, nx, ny, nz, nGhosts, ds)
       call calculate_gradients(p, dp_dx, dp_dy, dp_dz, nx, ny, nz, nGhosts, ds)
 
-      call update_ghosts(drho_dx, nx, ny, nz, nGhosts)
-      call update_ghosts(drho_dy, nx, ny, nz, nGhosts)
-      call update_ghosts(drho_dz, nx, ny, nz, nGhosts)
-      call update_ghosts(dvx_dx, nx, ny, nz, nGhosts)
-      call update_ghosts(dvx_dy, nx, ny, nz, nGhosts)
-      call update_ghosts(dvx_dz, nx, ny, nz, nGhosts)
-      call update_ghosts(dvy_dx, nx, ny, nz, nGhosts)
-      call update_ghosts(dvy_dy, nx, ny, nz, nGhosts)
-      call update_ghosts(dvy_dz, nx, ny, nz, nGhosts)
-      call update_ghosts(dvz_dx, nx, ny, nz, nGhosts)
-      call update_ghosts(dvz_dy, nx, ny, nz, nGhosts)
-      call update_ghosts(dvz_dz, nx, ny, nz, nGhosts)
-      call update_ghosts(dp_dx, nx, ny, nz, nGhosts)
-      call update_ghosts(dp_dy, nx, ny, nz, nGhosts)
-      call update_ghosts(dp_dz, nx, ny, nz, nGhosts)
+      call update_gradient_ghost(drho_dx, drho_dy, drho_dz, dvx_dx, dvx_dy, dvx_dz, dvy_dx, &
+                                 dvy_dy, dvy_dz, dvz_dx, dvz_dy, dvz_dz, dp_dx, dp_dy, dp_dz, nx, ny, nz, nGhosts, BCs)
 
-      call extrapolateprimitves(rho, vx, vy, vz, p, drho_dx, drho_dy, drho_dz, &
-                                dvx_dx, dvx_dy, dvx_dz, dvy_dx, dvy_dy, dvy_dz, &
-                                dvz_dx, dvz_dy, dvz_dz, dp_dx, dp_dy, dp_dz, &
-                                rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr, dt)
+      call extrapolate_primitves(rho, vx, vy, vz, p, drho_dx, drho_dy, drho_dz, &
+                                 dvx_dx, dvx_dy, dvx_dz, dvy_dx, dvy_dy, dvy_dz, &
+                                 dvz_dx, dvz_dy, dvz_dz, dp_dx, dp_dy, dp_dz, &
+                                 rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr, dt)
 
-      call update_ghosts(rho_xtr, nx, ny, nz, nGhosts)
-      call update_ghosts(vx_xtr, nx, ny, nz, nGhosts)
-      call update_ghosts(vy_xtr, nx, ny, nz, nGhosts)
-      call update_ghosts(vz_xtr, nx, ny, nz, nGhosts)
-      call update_ghosts(p_xtr, nx, ny, nz, nGhosts)
+      call update_ghosts(rho_xtr, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(vx_xtr, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(vy_xtr, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(vz_xtr, nx, ny, nz, nGhosts, BCs)
+      call update_ghosts(p_xtr, nx, ny, nz, nGhosts, BCs)
 
       call reconstructflux(mass_flux_x, momentum_x_flux_x, momentum_y_flux_x, momentum_z_flux_x, &
                            energy_flux_x, drho_dx, dvx_dx, dvy_dx, dvz_dx, dp_dx, &
@@ -683,21 +780,9 @@ program euler_cfd
                            drho_dz, dvz_dz, dvy_dz, dvx_dz, dp_dz, &
                            rho_xtr, vz_xtr, vy_xtr, vx_xtr, p_xtr, nx, ny, nz, nGhosts, ds, shiftz)
 
-      call update_ghosts(mass_flux_x, nx, ny, nz, nGhosts)
-      call update_ghosts(mass_flux_y, nx, ny, nz, nGhosts)
-      call update_ghosts(mass_flux_z, nx, ny, nz, nGhosts)
-      call update_ghosts(momentum_x_flux_x, nx, ny, nz, nGhosts)
-      call update_ghosts(momentum_y_flux_x, nx, ny, nz, nGhosts)
-      call update_ghosts(momentum_z_flux_x, nx, ny, nz, nGhosts)
-      call update_ghosts(momentum_x_flux_y, nx, ny, nz, nGhosts)
-      call update_ghosts(momentum_y_flux_y, nx, ny, nz, nGhosts)
-      call update_ghosts(momentum_z_flux_y, nx, ny, nz, nGhosts)
-      call update_ghosts(momentum_x_flux_z, nx, ny, nz, nGhosts)
-      call update_ghosts(momentum_y_flux_z, nx, ny, nz, nGhosts)
-      call update_ghosts(momentum_z_flux_z, nx, ny, nz, nGhosts)
-      call update_ghosts(energy_flux_x, nx, ny, nz, nGhosts)
-      call update_ghosts(energy_flux_y, nx, ny, nz, nGhosts)
-      call update_ghosts(energy_flux_z, nx, ny, nz, nGhosts)
+      call update_flux_ghost(mass_flux_x, mass_flux_y, mass_flux_z, momentum_x_flux_x, momentum_y_flux_x, momentum_z_flux_x, &
+                             momentum_x_flux_y, momentum_y_flux_y, momentum_z_flux_y, momentum_x_flux_z, momentum_y_flux_z, &
+                             momentum_z_flux_z, energy_flux_x, energy_flux_y, energy_flux_z, nx, ny, nz, nGhosts, BCs)
 
       call addfluxes(mass_flux_x, mass_flux_y, mass_flux_z, &
                      momentum_x_flux_x, momentum_x_flux_y, momentum_x_flux_z, &
@@ -707,11 +792,9 @@ program euler_cfd
                      mass, momentum_x, momentum_y, momentum_z, energy, &
                      nx, ny, nz, nGhosts, dt, ds)
 
-      call write_state(time, timestep, rho, vx, vy, vz, p, &
-                       mass, momentum_x, momentum_y, &
-                       momentum_z, energy, temp)
-      print *, "Time=", time, "dt=", dt
       timestep = timestep + 1
+      call write_state(time, timestep, rho, vx, vy, vz, p, mass, momentum_x, momentum_y, momentum_z, energy, temp)
+      print *, "Time=", time, "s | Timestep=",timestep, "| dt=", dt,"s"
       time = time + dt
    end do
 
