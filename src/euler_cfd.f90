@@ -128,8 +128,7 @@ contains
 
    subroutine extrapolateprimitves(rho, vx, vy, vz, p, drho_dx, drho_dy, drho_dz, dvx_dx, dvx_dy, &
                                    dvx_dz, dvy_dx, dvy_dy, dvy_dz, dvz_dx, dvz_dy, dvz_dz, &
-                                   dp_dx, dp_dy, dp_dz, nx, ny, nz, nGhosts, &
-                                   rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr, dt)
+                                   dp_dx, dp_dy, dp_dz, rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr, dt)
       use types_and_kinds
       implicit none
       real(rk), dimension(:, :, :), intent(in) :: rho, vx, vy, vz, p, drho_dx, drho_dy, drho_dz, &
@@ -137,7 +136,6 @@ contains
                                                   dvz_dz, dp_dx, dp_dy, dp_dz
 
       real(rk), dimension(:, :, :), intent(inout) ::rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr
-      integer(ik), intent(in) :: nx, ny, nz, nGhosts
       real(rk), intent(in) :: dt
 
       rho_xtr = rho - 0.5*dt*(vx*drho_dx + rho*dvx_dx + vy*drho_dy + rho*dvy_dy + vz*drho_dz + rho*dvz_dz); 
@@ -301,7 +299,6 @@ contains
       real(rk), dimension(:, :, :), intent(in) :: grid
       real(rk), dimension(:, :, :), intent(inout) :: dgdx, dgdy, dgdz
       real(rk), intent(in) :: ds
-      real(rk):: s1, s2
       integer(ik), intent(in) :: nx, ny, nz, nGhosts
       integer(ik) :: i, j, k
       do k = nGhosts + 1, nz - nGhosts
@@ -381,8 +378,8 @@ program euler_cfd
                              nGhosts = 2
    integer(ik), parameter :: nx = xcells + 2*nGhosts, ny = ycells + 2*nGhosts, nz = zcells + 2*nGhosts
    real(rk), parameter :: ds = 1.0_rk
-   real(rk):: dt = -1.0_rk, time, time_max
-   integer(ik) :: timestep = 1, timestep_max
+   real(rk):: dt = 0.0_rk, time=0.0_rk, time_max=1.e-2_rk
+   integer(ik) :: timestep = 1
    integer(ik) :: shiftx(3), shifty(3), shiftz(3)
    character(72)::filename
 
@@ -437,9 +434,8 @@ program euler_cfd
 
    call conservative(mass, momentum_x, momentum_y, momentum_z, energy, rho, p, vx, vy, vz, temp, ds)
 
-   time = 0_rk
    !main
-   do while (timestep < 1005)
+   do while (time <= time_max)
 
       call update_ghosts(rho, nx, ny, nz, nGhosts)
       call update_ghosts(vx, nx, ny, nz, nGhosts)
@@ -473,8 +469,8 @@ program euler_cfd
 
       call extrapolateprimitves(rho, vx, vy, vz, p, drho_dx, drho_dy, drho_dz, &
                                 dvx_dx, dvx_dy, dvx_dz, dvy_dx, dvy_dy, dvy_dz, &
-                                dvz_dx, dvz_dy, dvz_dz, dp_dx, dp_dy, dp_dz, nx, ny, nz, &
-                                nGhosts, rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr, dt)
+                                dvz_dx, dvz_dy, dvz_dz, dp_dx, dp_dy, dp_dz,&
+                                rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr, dt)
 
       call update_ghosts(rho_xtr, nx, ny, nz, nGhosts)
       call update_ghosts(vx_xtr, nx, ny, nz, nGhosts)
@@ -493,11 +489,11 @@ program euler_cfd
       call reconstructflux(mass_flux_z, momentum_z_flux_z, momentum_y_flux_z, momentum_x_flux_z, energy_flux_z, &
                            drho_dz, dvz_dz, dvy_dz, dvx_dz, dp_dz, &
                            rho_xtr, vz_xtr, vy_xtr, vx_xtr, p_xtr, nx, ny, nz, nGhosts, ds, shiftz)
+      
 
       call update_ghosts(mass_flux_x, nx, ny, nz, nGhosts)
       call update_ghosts(mass_flux_y, nx, ny, nz, nGhosts)
       call update_ghosts(mass_flux_z, nx, ny, nz, nGhosts)
-
       call update_ghosts(momentum_x_flux_x, nx, ny, nz, nGhosts)
       call update_ghosts(momentum_y_flux_x, nx, ny, nz, nGhosts)
       call update_ghosts(momentum_z_flux_x, nx, ny, nz, nGhosts)
@@ -507,7 +503,6 @@ program euler_cfd
       call update_ghosts(momentum_x_flux_z, nx, ny, nz, nGhosts)
       call update_ghosts(momentum_y_flux_z, nx, ny, nz, nGhosts)
       call update_ghosts(momentum_z_flux_z, nx, ny, nz, nGhosts)
-
       call update_ghosts(energy_flux_x, nx, ny, nz, nGhosts)
       call update_ghosts(energy_flux_y, nx, ny, nz, nGhosts)
       call update_ghosts(energy_flux_z, nx, ny, nz, nGhosts)
@@ -519,12 +514,6 @@ program euler_cfd
                      energy_flux_x, energy_flux_y, energy_flux_z, &
                      mass, momentum_x, momentum_y, momentum_z, energy, &
                      nx, ny, nz, nGhosts, dt, ds)
-
-      !call update_ghosts(mass, nx, ny, nz, nGhosts)
-      !call update_ghosts(momentum_x, nx, ny, nz, nGhosts)
-      !call update_ghosts(momentum_y, nx, ny, nz, nGhosts)
-      !call update_ghosts(momentum_z, nx, ny, nz, nGhosts)
-      !call update_ghosts(energy, nx, ny, nz, nGhosts)
 
       !io
       write (filename, '(a,"000",i7.7,a)') "mass.", timestep, ".dat"
