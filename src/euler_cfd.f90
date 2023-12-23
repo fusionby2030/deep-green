@@ -222,15 +222,15 @@ contains
 
    end subroutine close_hdf5file
 
-   subroutine write_state(tstep, rho, vx, vy, vz, p,&
-                                 mass,momentum_x,momentum_y,&
-                                 momentum_z,energy,temp)
+   subroutine write_state(tstep, rho, vx, vy, vz, p, &
+                          mass, momentum_x, momentum_y, &
+                          momentum_z, energy, temp)
       use hdf5
       use types_and_kinds
       implicit none
-      real(rk), dimension(:, :, :), intent(in) :: rho, vx, vy, vz, p,&
-                                    mass,momentum_x,momentum_y,&
-                                    momentum_z,energy,temp
+      real(rk), dimension(:, :, :), intent(in) :: rho, vx, vy, vz, p, &
+                                                  mass, momentum_x, momentum_y, &
+                                                  momentum_z, energy, temp
       integer(ik), intent(in) :: tstep
       character(32) :: fname
       integer(hid_t) :: file_id
@@ -238,25 +238,25 @@ contains
       write (fname, '(a,"000",i7.7,a)') "state.", tstep, ".h5"
       call create_hdf5file(fname, file_id, error)
       call open_hdf5file(fname, file_id, error)
-      call add_field_h5(file_id, "rho",rho)
+      call add_field_h5(file_id, "rho", rho)
       call add_field_h5(file_id, "vx", vx)
       call add_field_h5(file_id, "vy", vy)
       call add_field_h5(file_id, "vz", vz)
       call add_field_h5(file_id, "p", p)
-      call add_field_h5(file_id, "mass",mass)
+      call add_field_h5(file_id, "mass", mass)
       call add_field_h5(file_id, "momentum_x", momentum_x)
       call add_field_h5(file_id, "momentum_y", momentum_y)
       call add_field_h5(file_id, "momentum_z", momentum_z)
       call add_field_h5(file_id, "energy", energy)
-      call add_field_h5(file_id, "temperature",temp)
+      call add_field_h5(file_id, "temperature", temp)
       call close_hdf5file(file_id, error)
    end subroutine write_state
 
-   subroutine write_conserved(tstep,mass,momentum_x,momentum_y,momentum_z,energy,temp)
+   subroutine write_conserved(tstep, mass, momentum_x, momentum_y, momentum_z, energy, temp)
       use hdf5
       use types_and_kinds
       implicit none
-      real(rk), dimension(:, :, :), intent(in) :: mass,momentum_x,momentum_y,momentum_z,energy,temp
+      real(rk), dimension(:, :, :), intent(in) :: mass, momentum_x, momentum_y, momentum_z, energy, temp
       integer(ik), intent(in) :: tstep
       character(32) :: fname
       integer(hid_t) :: file_id
@@ -264,7 +264,7 @@ contains
       write (fname, '(a,"000",i7.7,a)') "primitives.", tstep, ".h5"
       call create_hdf5file(fname, file_id, error)
       call open_hdf5file(fname, file_id, error)
-      call add_field_h5(file_id, "mass",mass)
+      call add_field_h5(file_id, "mass", mass)
       call add_field_h5(file_id, "momentum_x", momentum_x)
       call add_field_h5(file_id, "momentum_y", momentum_y)
       call add_field_h5(file_id, "momentum_z", momentum_z)
@@ -704,10 +704,9 @@ program euler_cfd
                      mass, momentum_x, momentum_y, momentum_z, energy, &
                      nx, ny, nz, nGhosts, dt, ds)
 
-
-      call write_state(timestep, rho, vx, vy, vz, p,&
-                                 mass,momentum_x,momentum_y,&
-                                 momentum_z,energy,temp)
+      call write_state(timestep, rho, vx, vy, vz, p, &
+                       mass, momentum_x, momentum_y, &
+                       momentum_z, energy, temp)
       print *, "Time=", time, "dt=", dt
       timestep = timestep + 1
       time = time + dt
