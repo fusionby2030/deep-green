@@ -72,7 +72,8 @@ module io
    implicit none
 contains
 
-   subroutine write_grid(grid, filename)
+   !DEPRECATED USE WRITE_STATE
+   subroutine write_grid_sad(grid, filename)
       real(rk), dimension(:, :, :), intent(in) :: grid
       character(len=*), intent(in) :: filename
       ! need to use stream as access for the binary (why?)
@@ -80,7 +81,197 @@ contains
       open (1, file=filename, form='unformatted', access='stream', status='replace')
       write (1) grid
       close (1)
-   end subroutine write_grid
+   end subroutine write_grid_sad
+
+   !only for double 8 and same 3D shape for all arrays
+   !Credits to https://gist.github.com/dmentipl/ed609e7278050bd6de0016c09155e039
+   subroutine add_field_h5(id, name, field)
+      use hdf5
+      use types_and_kinds
+      implicit none
+      real(rk), dimension(:, :, :), intent(in) :: field
+      character(len=*), intent(in) :: name
+      integer(hid_t), intent(in) :: id
+      integer :: error
+
+      integer, parameter :: ndims = 3
+      integer(hsize_t)   :: data_shape(ndims)
+      integer(hsize_t)   :: chunk(ndims)
+      integer(hid_t)     :: dspace_id
+      integer(hid_t)     :: dset_id
+      integer(hid_t)     :: dtype_id
+
+      data_shape = shape(field)
+      chunk = shape(field)
+      dtype_id = H5T_NATIVE_DOUBLE
+
+      call h5screate_f(h5s_scalar_f, dspace_id, error)
+      if (error /= 0) then
+         write (*, '("cannot create hdf5 dataspace",/)')
+         return
+      end if
+
+      call h5dcreate_f(id, name, dtype_id, dspace_id, dset_id, error)
+      if (error /= 0) then
+         write (*, '("cannot create hdf5 dataset",/)')
+         return
+      end if
+
+      call h5dwrite_f(dset_id, dtype_id, field, data_shape, error)
+      if (error /= 0) then
+         write (*, '("cannot write to hdf5 file",/)')
+         return
+      end if
+
+      call h5dclose_f(dset_id, error)
+      if (error /= 0) then
+         write (*, '("cannot close hdf5 dataset",/)')
+         return
+      end if
+
+      call h5sclose_f(dspace_id, error)
+      if (error /= 0) then
+         write (*, '("cannot close hdf5 dataspace",/)')
+         return
+      end if
+
+   end subroutine add_field_h5
+
+   subroutine create_hdf5file(filename, file_id, error)
+      use hdf5
+      character(len=*), intent(in)  :: filename
+      integer(hid_t), intent(out) :: file_id
+      integer, intent(out) :: error
+      integer :: filter_info
+      integer :: filter_info_both
+      logical :: avail
+
+      ! initialise hdf5
+      call h5open_f(error)
+      if (error /= 0) then
+         write (*, '("cannot initialise hdf5",/)')
+         return
+      end if
+
+      ! check if gzip compression is available.
+      call h5zfilter_avail_f(h5z_filter_deflate_f, avail, error)
+      if (.not. avail) then
+         write (*, '("gzip filter not available.",/)')
+         return
+      end if
+      call h5zget_filter_info_f(h5z_filter_deflate_f, filter_info, error)
+      filter_info_both = ior(h5z_filter_encode_enabled_f, h5z_filter_decode_enabled_f)
+      if (filter_info /= filter_info_both) then
+         write (*, '("gzip filter not available for encoding and decoding.",/)')
+         return
+      end if
+
+      ! create file
+      call h5fcreate_f(filename, h5f_acc_trunc_f, file_id, error)
+      if (error /= 0) then
+         write (*, '("cannot create hdf5 file",/)')
+         return
+      end if
+
+   end subroutine create_hdf5file
+
+   !Credits to https://gist.github.com/dmentipl/ed609e7278050bd6de0016c09155e039
+   subroutine open_hdf5file(filename, file_id, error)
+      use hdf5
+      implicit none
+      character(len=*), intent(in)  :: filename
+      integer(hid_t), intent(out) :: file_id
+      integer, intent(out) :: error
+
+      ! initialise hdf5
+      call h5open_f(error)
+      if (error /= 0) then
+         write (*, '("cannot initialise hdf5",/)')
+         return
+      end if
+
+      ! open file
+      call h5fopen_f(filename, h5f_acc_rdwr_f, file_id, error)
+      if (error /= 0) then
+         write (*, '("cannot open hdf5 file",/)')
+         return
+      end if
+
+   end subroutine open_hdf5file
+
+   !Credits to https://gist.github.com/dmentipl/ed609e7278050bd6de0016c09155e039
+   subroutine close_hdf5file(file_id, error)
+      use hdf5
+      implicit none
+      integer(hid_t), intent(in)  :: file_id
+      integer, intent(out) :: error
+
+      ! close file
+      call h5fclose_f(file_id, error)
+      if (error /= 0) then
+         write (*, '("cannot close hdf5 file",/)')
+         return
+      end if
+
+      ! close hdf5
+      call h5close_f(error)
+      if (error /= 0) then
+         write (*, '("cannot close hdf5",/)')
+         return
+      end if
+
+   end subroutine close_hdf5file
+
+   subroutine write_state(tstep, rho, vx, vy, vz, p,&
+                                 mass,momentum_x,momentum_y,&
+                                 momentum_z,energy,temp)
+      use hdf5
+      use types_and_kinds
+      implicit none
+      real(rk), dimension(:, :, :), intent(in) :: rho, vx, vy, vz, p,&
+                                    mass,momentum_x,momentum_y,&
+                                    momentum_z,energy,temp
+      integer(ik), intent(in) :: tstep
+      character(32) :: fname
+      integer(hid_t) :: file_id
+      integer:: error
+      write (fname, '(a,"000",i7.7,a)') "state.", tstep, ".h5"
+      call create_hdf5file(fname, file_id, error)
+      call open_hdf5file(fname, file_id, error)
+      call add_field_h5(file_id, "rho",rho)
+      call add_field_h5(file_id, "vx", vx)
+      call add_field_h5(file_id, "vy", vy)
+      call add_field_h5(file_id, "vz", vz)
+      call add_field_h5(file_id, "p", p)
+      call add_field_h5(file_id, "mass",mass)
+      call add_field_h5(file_id, "momentum_x", momentum_x)
+      call add_field_h5(file_id, "momentum_y", momentum_y)
+      call add_field_h5(file_id, "momentum_z", momentum_z)
+      call add_field_h5(file_id, "energy", energy)
+      call add_field_h5(file_id, "temperature",temp)
+      call close_hdf5file(file_id, error)
+   end subroutine write_state
+
+   subroutine write_conserved(tstep,mass,momentum_x,momentum_y,momentum_z,energy,temp)
+      use hdf5
+      use types_and_kinds
+      implicit none
+      real(rk), dimension(:, :, :), intent(in) :: mass,momentum_x,momentum_y,momentum_z,energy,temp
+      integer(ik), intent(in) :: tstep
+      character(32) :: fname
+      integer(hid_t) :: file_id
+      integer:: error
+      write (fname, '(a,"000",i7.7,a)') "primitives.", tstep, ".h5"
+      call create_hdf5file(fname, file_id, error)
+      call open_hdf5file(fname, file_id, error)
+      call add_field_h5(file_id, "mass",mass)
+      call add_field_h5(file_id, "momentum_x", momentum_x)
+      call add_field_h5(file_id, "momentum_y", momentum_y)
+      call add_field_h5(file_id, "momentum_z", momentum_z)
+      call add_field_h5(file_id, "energy", energy)
+      call add_field_h5(file_id, "temperature", temp)
+      call close_hdf5file(file_id, error)
+   end subroutine write_conserved
 
 end module io
 
@@ -372,16 +563,15 @@ program euler_cfd
       dvz_dx, dvz_dy, dvz_dz, &
       dp_dx, dp_dy, dp_dz, rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr
 
-   integer(ik), parameter :: xcells = 128,&
-                             ycells = 128,&
-                             zcells = 128,&
+   integer(ik), parameter :: xcells = 128, &
+                             ycells = 128, &
+                             zcells = 128, &
                              nGhosts = 2
    integer(ik), parameter :: nx = xcells + 2*nGhosts, ny = ycells + 2*nGhosts, nz = zcells + 2*nGhosts
    real(rk), parameter :: ds = 1.0_rk
-   real(rk):: dt = 0.0_rk, time=0.0_rk, time_max=1.e-2_rk
+   real(rk):: dt = 0.0_rk, time = 0.0_rk, time_max = 1.e-2_rk
    integer(ik) :: timestep = 1
    integer(ik) :: shiftx(3), shifty(3), shiftz(3)
-   character(72)::filename
 
    allocate (rho(nx, ny, nz), vx(nx, ny, nz), vy(nx, ny, nz), vz(nx, ny, nz), p(nx, ny, nz), mass(nx, ny, nz), &
              momentum_x(nx, ny, nz), momentum_y(nx, ny, nz), momentum_z(nx, ny, nz), energy(nx, ny, nz), &
@@ -469,7 +659,7 @@ program euler_cfd
 
       call extrapolateprimitves(rho, vx, vy, vz, p, drho_dx, drho_dy, drho_dz, &
                                 dvx_dx, dvx_dy, dvx_dz, dvy_dx, dvy_dy, dvy_dz, &
-                                dvz_dx, dvz_dy, dvz_dz, dp_dx, dp_dy, dp_dz,&
+                                dvz_dx, dvz_dy, dvz_dz, dp_dx, dp_dy, dp_dz, &
                                 rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr, dt)
 
       call update_ghosts(rho_xtr, nx, ny, nz, nGhosts)
@@ -489,7 +679,6 @@ program euler_cfd
       call reconstructflux(mass_flux_z, momentum_z_flux_z, momentum_y_flux_z, momentum_x_flux_z, energy_flux_z, &
                            drho_dz, dvz_dz, dvy_dz, dvx_dz, dp_dz, &
                            rho_xtr, vz_xtr, vy_xtr, vx_xtr, p_xtr, nx, ny, nz, nGhosts, ds, shiftz)
-      
 
       call update_ghosts(mass_flux_x, nx, ny, nz, nGhosts)
       call update_ghosts(mass_flux_y, nx, ny, nz, nGhosts)
@@ -515,44 +704,10 @@ program euler_cfd
                      mass, momentum_x, momentum_y, momentum_z, energy, &
                      nx, ny, nz, nGhosts, dt, ds)
 
-      !io
-      write (filename, '(a,"000",i7.7,a)') "mass.", timestep, ".dat"
-      call write_grid(mass, filename)
-      write (filename, '(a,"000",i7.7,a)') "rho.", timestep, ".dat"
-      call write_grid(rho, filename)
-      write (filename, '(a,"000",i7.7,a)') "vx.", timestep, ".dat"
-      call write_grid(vx, filename)
-      write (filename, '(a,"000",i7.7,a)') "vy.", timestep, ".dat"
-      call write_grid(vy, filename)
-      write (filename, '(a,"000",i7.7,a)') "vz.", timestep, ".dat"
-      call write_grid(vz, filename)
-      write (filename, '(a,"000",i7.7,a)') "pressure.", timestep, ".dat"
-      call write_grid(p, filename)
-      write (filename, '(a,"000",i7.7,a)') "mass_flux_x.", timestep, ".dat"
-      call write_grid(mass_flux_x, filename)
-      write (filename, '(a,"000",i7.7,a)') "mass_flux_y.", timestep, ".dat"
-      call write_grid(mass_flux_y, filename)
-      write (filename, '(a,"000",i7.7,a)') "mass_flux_z.", timestep, ".dat"
-      call write_grid(mass_flux_z, filename)
-      write (filename, '(a,"000",i7.7,a)') "momentum_x_flux_x.", timestep, ".dat"
-      call write_grid(momentum_x_flux_x, filename)
-      write (filename, '(a,"000",i7.7,a)') "momentum_x_flux_y.", timestep, ".dat"
-      call write_grid(momentum_x_flux_y, filename)
-      write (filename, '(a,"000",i7.7,a)') "momentum_x_flux_z.", timestep, ".dat"
-      call write_grid(momentum_x_flux_z, filename)
-      write (filename, '(a,"000",i7.7,a)') "dvx_dx.", timestep, ".dat"
-      call write_grid(dvx_dx, filename)
-      write (filename, '(a,"000",i7.7,a)') "drho_dx.", timestep, ".dat"
-      call write_grid(drho_dx, filename)
-      write (filename, '(a,"000",i7.7,a)') "momentum_x.", timestep, ".dat"
-      call write_grid(momentum_x, filename)
-      write (filename, '(a,"000",i7.7,a)') "momentum_y.", timestep, ".dat"
-      call write_grid(momentum_y, filename)
-      write (filename, '(a,"000",i7.7,a)') "momentum_z.", timestep, ".dat"
-      call write_grid(momentum_z, filename)
-      write (filename, '(a,"000",i7.7,a)') "temp.", timestep, ".dat"
-      call write_grid(temp, filename)
 
+      call write_state(timestep, rho, vx, vy, vz, p,&
+                                 mass,momentum_x,momentum_y,&
+                                 momentum_z,energy,temp)
       print *, "Time=", time, "dt=", dt
       timestep = timestep + 1
       time = time + dt
