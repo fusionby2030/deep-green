@@ -53,7 +53,7 @@ program euler_cfd
                              nGhosts = 2
    integer(ik), parameter :: nx = xcells + 2*nGhosts, ny = ycells + 2*nGhosts, nz = zcells + 2*nGhosts
    real(rk), parameter :: ds = 1.0_rk
-   real(rk):: dt = 0.0_rk, time = 0.0_rk, time_max = 1.e-2_rk
+   real(rk):: dt = 0.0_rk, time = 0.0_rk, time_max = 1.0_rk
    integer(ik) :: timestep = 0
    integer(ik) :: shiftx(3), shifty(3), shiftz(3)
    integer(4):: BCs(6)

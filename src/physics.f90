@@ -251,26 +251,26 @@ contains
       done_z=0
 
       if (BCs(1)==PERIODIC .and. BCs(2)==PERIODIC) then
-         grid(1, :, :) = grid(3, :, :)
-         grid(2, :, :) = grid(3, :, :)
-         grid(nx - 1, :, :) = grid(nx - nGhosts, :, :)
-         grid(nx, :, :) = grid(nx - nGhosts, :, :)
+         grid(1,:,:)=grid(nx-nGhosts-1,:,:)
+         grid(2,:,:)=grid(nx-nGhosts,:,:)
+         grid(nx-1,:,:)=grid(3,:,:)
+         grid(nx,:,:)=grid(4,:,:)
          done_x=1
       endif
 
       if (BCs(3)==PERIODIC .and. BCs(4)==PERIODIC) then
-         grid(:, 1, :) = grid(:, 3, :)
-         grid(:, 2, :) = grid(:, 3, :)
-         grid(:, nx - 1, :) = grid(:, ny - nGhosts, :)
-         grid(:, nx, :) = grid(:, ny - nGhosts, :)
+         grid(:,1,:)=grid(:,ny-nGhosts-1,:)
+         grid(:,2,:)=grid(:,ny-nGhosts,:)
+         grid(:,ny-1,:)=grid(:,3,:)
+         grid(:,ny,:)=grid(:,4,:)
          done_y=1
       endif
 
       if (BCs(5)==PERIODIC .and. BCs(6)==PERIODIC) then
-         grid(:, :, 1) = grid(:, :, 3)
-         grid(:, :, 2) = grid(:, :, 3)
-         grid(:, :, nx - 1) = grid(:, :, nz - nGhosts)
-         grid(:, :, nx) = grid(:, :, nz - nGhosts)
+         grid(:,:,1)=grid(:,:,nz-nGhosts-1)
+         grid(:,:,2)=grid(:,:,nz-nGhosts)
+         grid(:,:,nz-1)=grid(:,:,3)
+         grid(:,:,nz)=grid(:,:,4)
          done_z=1
       endif
       
@@ -278,21 +278,42 @@ contains
          return 
       endif
 
+      
+      select case (BCs(1))
+         case (OUTFLOW)
+            grid(1, :, :) = grid(3, :, :)
+            grid(2, :, :) = grid(3, :, :)
+      end select
 
-      !grid(1,:,:)=grid(nx-nGhosts-1,:,:)
-      !grid(2,:,:)=grid(nx-nGhosts,:,:)
-      !grid(nx-1,:,:)=grid(3,:,:)
-      !grid(nx,:,:)=grid(4,:,:)
+      select case (BCs(2))
+         case (OUTFLOW)
+         grid(nx - 1, :, :) = grid(nx - nGhosts, :, :)
+         grid(nx, :, :) = grid(nx - nGhosts, :, :)
+      end select
 
-      !grid(:,1,:)=grid(:,nx-nGhosts-1,:)
-      !grid(:,2,:)=grid(:,nx-nGhosts,:)
-      !grid(:,nx-1,:)=grid(:,3,:)
-      !grid(:,nx,:)=grid(:,4,:)
+      select case (BCs(3))
+         case (OUTFLOW)
+            grid(:, 1, :) = grid(:, 3, :)
+            grid(:, 2, :) = grid(:, 3, :)
+      end select
 
-      !grid(:,:,1)=grid(:,:,nx-nGhosts-1)
-      !grid(:,:,2)=grid(:,:,nx-nGhosts)
-      !grid(:,:,nx-1)=grid(:,:,3)
-      !grid(:,:,nx)=grid(:,:,4)
+      select case (BCs(4))
+         case (OUTFLOW)
+            grid(:, ny - 1, :) = grid(:, ny - nGhosts, :)
+            grid(:, ny, :) = grid(:, ny - nGhosts, :)
+      end select
+
+      select case (BCs(5))
+         case (OUTFLOW)
+            grid(:, :, 1) = grid(:, :, 3)
+            grid(:, :, 2) = grid(:, :, 3)
+      end select
+
+      select case (BCs(6))
+         case (OUTFLOW)
+            grid(:, :, nz - 1) = grid(:, :, nz - nGhosts)
+            grid(:, :, nz) = grid(:, :, nz - nGhosts)
+      end select
 
    end subroutine update_ghosts
 
