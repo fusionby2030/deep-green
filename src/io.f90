@@ -15,7 +15,71 @@ module io
    use types_and_kinds
    implicit none
 contains
+   ! shitty routine to read namelist 
+   SUBROUTINE open_inputfile(file_path, file_unit, iostat)
+      !! Check whether file exists, with consitent error message
+      !! return the file unit
+      CHARACTER(len=*),  INTENT(in)  :: file_path
+      INTEGER,  INTENT(out) :: file_unit, iostat
 
+      inquire (file=file_path, iostat=iostat)
+      if (iostat /= 0) then
+         write (*, '(3a)') 'Error: file "', trim(file_path), '" not found!'
+      end if
+      open (action='read', file=file_path, iostat=iostat, newunit=file_unit)
+   END SUBROUTINE open_inputfile
+   SUBROUTINE close_inputfile(file_path, file_unit, iostat)
+      !! Check the reading was OK
+      !! return error line IF not
+      !! close the unit
+      character(len=*),  intent(in)  :: file_path
+      character(len=1000) :: line
+      integer,  intent(in) :: file_unit, iostat
+
+      if (iostat /= 0) then
+         write (*, '(2a)') 'Error reading file :"', trim(file_path)
+         write (*, '(a, i0)') 'iostat was:"', iostat
+         backspace(file_unit)
+         read(file_unit,fmt='(A)') line
+         write(*,'(A)') &
+            'Invalid line : '//trim(line)
+      end if
+      close (file_unit)   
+   END SUBROUTINE close_inputfile
+
+   SUBROUTINE read_inputs(filepath, & 
+                        Nx, Ny, Nz, nGhosts) 
+      CHARACTER(len=*), INTENT(IN) :: filepath 
+      INTEGER(ik), INTENT(INOUT) :: Nx, Ny, Nz,nGhosts
+      INTEGER (IK) :: save_interval
+      REAL(RK) :: wall_thickness, ds, dt, simrealtime, outside_temperature
+      REAL(RK) :: computer_power
+      integer :: file_unit, iostat
+      namelist /GREENHOUSE/ Nx, Ny, Nz,nGhosts, wall_thickness, computer_power, outside_temperature
+      namelist /SIMULATION/ dt, ds, simrealtime, save_interval 
+      
+      call open_inputfile(filepath, file_unit, iostat)
+      if (iostat /= 0) then
+         stop
+      end if
+      read (nml=GREENHOUSE, iostat=iostat, unit=file_unit)
+      read (nml=SIMULATION, iostat=iostat, unit=file_unit)
+      call close_inputfile(filepath, file_unit, iostat)
+      if (iostat /= 0) then
+         stop
+      end if
+   END SUBROUTINE read_inputs
+
+   SUBROUTINE read_pressure_cond(filename, pressure_init_cond, cond_Nx, cond_Ny, cond_Nz, cond_nGhosts)
+      CHARACTER(len=*), INTENT(IN) :: filename
+      INTEGER(ik), INTENT(in) :: cond_Nx, cond_Ny, cond_Nz, cond_nGhosts
+      REAL(RK), DIMENSION(:,:,:), INTENT(INOUT) :: pressure_init_cond
+      
+      ! read input file
+      open(1, file=filename, form='unformatted', access='stream')
+      read(1) pressure_init_cond 
+      close(1) 
+   END SUBROUTINE read_pressure_cond
    !DEPRECATED USE WRITE_STATE
    subroutine write_grid_sad(grid, filename)
       real(rk), dimension(:, :, :), intent(in) :: grid

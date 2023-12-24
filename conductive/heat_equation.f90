@@ -262,6 +262,7 @@ PROGRAM conductive_heat
         
     end do 
     CALL write_grid(T + k_to_c, 'T.dat')
+    call write_grid((T- 273.15_rk)*(density_air*287.0_rk) , 'P.dat')
     DEALLOCATE(T, T_new, sources)
 
 END PROGRAM conductive_heat

@@ -45,20 +45,31 @@ program euler_cfd
       dvz_dx, dvz_dy, dvz_dz, &
       dp_dx, dp_dy, dp_dz, rho_xtr, &
       ! extrapolated primitives
-      vx_xtr, vy_xtr, vz_xtr, p_xtr
+      vx_xtr, vy_xtr, vz_xtr, p_xtr, &
+      ! pressure from conductive sim 
+      pressure_init_cond
 
-   integer(ik), parameter :: xcells = 128, &
-                             ycells = 128, &
-                             zcells = 128, &
+   integer(ik), parameter :: xcells = 20, &
+                             ycells = 36, &
+                             zcells = 40, &
                              nGhosts = 2
    integer(ik), parameter :: nx = xcells + 2*nGhosts, ny = ycells + 2*nGhosts, nz = zcells + 2*nGhosts
    real(rk), parameter :: ds = 1.0_rk
    real(rk), parameter :: tout = 0.01_rk
-   real(rk):: dt = 0.0_rk, time = 0.0_rk, write_time = 0.0_rk ,time_max = 0.05_rk
+   real(rk):: dt = 0.0_rk, time = 0.0_rk, write_time = 0.0_rk ,time_max = 1.05_rk
    integer(ik) :: timestep = 0, nWrites=0
    integer(ik) :: shiftx(3), shifty(3), shiftz(3)
    integer(4):: BCs(6)
+   integer(ik) :: cond_Nx, cond_Ny, cond_Nz, cond_nGhosts
 
+   ! shitty components to be moved later
+   call read_inputs('/home/kitadam/Uni/2023/Sci_Computing_II/final_project/deep-green/conductive/run/conductive_input.nml', & 
+   cond_Nx, cond_Ny, cond_Nz, cond_nGhosts)
+
+   allocate(pressure_init_cond(cond_Nx+2*cond_nGhosts, cond_Ny+2*cond_nGhosts, cond_Nz+2*cond_nGhosts))
+   ! read in pressure from conductive sim
+   call read_pressure_cond('/home/kitadam/Uni/2023/Sci_Computing_II/final_project/deep-green/conductive/P.dat', pressure_init_cond, cond_Nx, cond_Ny, cond_Nz, cond_nGhosts)
+   ! deallocate(pressure_init_cond)
    !Set  boundary conditions
    BCs(1) = PERIODIC !x-
    BCs(2) = PERIODIC !x+
@@ -89,8 +100,14 @@ program euler_cfd
    shifty(2) = 1
    shiftz(3) = 1
    ! initialize vx, vy, vz to 0
-   call init_grid_gaussian(rho, nx, ny, nz, nGhosts, nx/2.0_rk, 8.0_rk, 0.0_rk*1.2_rk, 1.2_rk)
-   call init_grid_gaussian(p, nx, ny, nz, nGhosts, nx/2.0_rk, 8.0_rk, 0.0001_rk*101325, 101325.0_rk)
+   ! call init_grid_gaussian(rho, nx, ny, nz, nGhosts, nx/2.0_rk, 8.0_rk, 0.0_rk*1.2_rk, 1.2_rk)
+   rho = 1200.0_rk
+   print *, shape(p)
+   print *, shape(pressure_init_cond)
+   print *, shape(p(1+nGhosts:nx-nGhosts, 1+nGhosts:ny-nGhosts, 1+nGhosts:nz-nGhosts))
+   print *, shape(pressure_init_cond(1+cond_nGhosts:cond_Nx+cond_nGhosts, 1+cond_nGhosts:cond_Ny+cond_nGhosts, 1+cond_nGhosts:cond_Nz+cond_nGhosts))
+   ! call init_grid_gaussian(p, nx, ny, nz, nGhosts, nx/2.0_rk, 8.0_rk, 0.0001_rk*101325, 101325.0_rk)
+   p(1+2*nGhosts:nx-2*nGhosts, 1+2*nGhosts:ny-2*nGhosts, 1+2*nGhosts:nz-2*nGhosts) = pressure_init_cond
    call init_grid(vx, nx, ny, nz, nGhosts, 0.0_rk)
    call init_grid(vy, nx, ny, nz, nGhosts, 0.0_rk)
    call init_grid(vz, nx, ny, nz, nGhosts, 0.0_rk)
@@ -195,5 +212,6 @@ program euler_cfd
                dvx_dx, dvx_dy, dvx_dz, &
                dvy_dx, dvy_dy, dvy_dz, &
                dvz_dx, dvz_dy, dvz_dz, &
-               dp_dx, dp_dy, dp_dz, rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr)
+               dp_dx, dp_dy, dp_dz, rho_xtr, vx_xtr, vy_xtr, vz_xtr, p_xtr, &
+               pressure_init_cond)
 end program euler_cfd
