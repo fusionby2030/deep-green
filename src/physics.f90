@@ -14,6 +14,7 @@
 module physics
    use types_and_kinds
    use global
+   use omp_lib
    implicit none
 contains
    subroutine conservative(mass, momentum_x, momentum_y, momentum_z, energy, rho, p, vx, vy, vz, temp, ds)
@@ -87,6 +88,7 @@ contains
       real(rk) :: c_l, c_r, c_star
       real(rk) :: rl, rr, vxl, vxr, vyl, vyr, vzl, vzr, pl, pr
       ! start by calculating rho_star, which is average of density
+      !$omp parallel do collapse(3)
       do k = nGhosts + 1, nz - nGhosts
          do j = nGhosts + 1, ny - nGhosts
             do i = nGhosts + 1, nx - nGhosts
@@ -144,6 +146,7 @@ contains
             end do
          end do
       end do
+      !$omp end parallel do 
    end subroutine reconstructflux
 
    subroutine addfluxes(mass_flux_x, mass_flux_y, mass_flux_z, &
@@ -163,6 +166,7 @@ contains
       real(rk), intent(in) :: dt, ds
       integer(ik) :: i, j, k
 
+      !$omp parallel do collapse(3)
       do k = nGhosts + 1, nz - nGhosts
          do j = nGhosts + 1, ny - nGhosts
             do i = nGhosts + 1, nx - nGhosts
@@ -184,6 +188,7 @@ contains
             end do
          end do
       end do
+      !$omp end parallel do
    end subroutine addfluxes
    function maxmod(a, b)
       use types_and_kinds
@@ -227,6 +232,7 @@ contains
       real(rk), intent(in) :: ds
       integer(ik), intent(in) :: nx, ny, nz, nGhosts
       integer(ik) :: i, j, k
+      !$omp parallel do collapse(3)
       do k = nGhosts + 1, nz - nGhosts
          do j = nGhosts + 1, ny - nGhosts
             do i = nGhosts + 1, nx - nGhosts
@@ -236,6 +242,7 @@ contains
             end do
          end do
       end do
+      !$omp end parallel do
    end subroutine calculate_gradients
 
    subroutine update_ghosts(grid, nx, ny, nz, nGhosts, BCs)

@@ -3,7 +3,7 @@ project('ghouse', 'fortran',
   default_options : ['warning_level=3'])
 
 hdf5 = dependency('hdf5', language: 'fortran',required : true)
-add_global_arguments('-ffree-line-length-none', language : 'fortran')
+add_global_arguments('-fopenmp','-ffree-line-length-none', language : 'fortran')
 
 executable('ghouse',
            'euler_cfd.f90',
@@ -12,5 +12,6 @@ executable('ghouse',
            'global.f90',
            'initialization.f90',
            'io.f90',
+           link_args:['-fopenmp'],
            dependencies : hdf5,
            install : true)
