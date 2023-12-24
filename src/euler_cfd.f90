@@ -53,8 +53,9 @@ program euler_cfd
                              nGhosts = 2
    integer(ik), parameter :: nx = xcells + 2*nGhosts, ny = ycells + 2*nGhosts, nz = zcells + 2*nGhosts
    real(rk), parameter :: ds = 1.0_rk
-   real(rk):: dt = 0.0_rk, time = 0.0_rk, time_max = 1.0_rk
-   integer(ik) :: timestep = 0
+   real(rk), parameter :: tout = 0.01_rk
+   real(rk):: dt = 0.0_rk, time = 0.0_rk, write_time = 0.0_rk ,time_max = 1.0_rk
+   integer(ik) :: timestep = 0, nWrites=0
    integer(ik) :: shiftx(3), shifty(3), shiftz(3)
    integer(4):: BCs(6)
 
@@ -111,7 +112,8 @@ program euler_cfd
 
    call update_primitive_ghosts(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, BCs)
    call conservative(mass, momentum_x, momentum_y, momentum_z, energy, rho, p, vx, vy, vz, temp, ds)
-   call write_state(time, timestep, rho, vx, vy, vz, p, mass, momentum_x, momentum_y, momentum_z, energy, temp)
+   call write_state(time, nWrites, rho, vx, vy, vz, p, mass, momentum_x, momentum_y, momentum_z, energy, temp)
+   nWrites=1;
 
    !main
    do while (time <= time_max)
@@ -169,9 +171,17 @@ program euler_cfd
                      nx, ny, nz, nGhosts, dt, ds)
 
       timestep = timestep + 1
-      call write_state(time, timestep, rho, vx, vy, vz, p, mass, momentum_x, momentum_y, momentum_z, energy, temp)
+      if (write_time>tout) then 
+         print*, "Performing IO..."
+         call write_state(time, nWrites, rho, vx, vy, vz, p, mass, momentum_x, momentum_y, momentum_z, energy, temp)
+         print*, "IO done!"
+         nWrites=nWrites+1
+         write_time=0.0_rk
+      endif
+
       print *, "Time=", time, "s | Timestep=",timestep, "| dt=", dt,"s"
       time = time + dt
+      write_time = write_time + dt
    end do
 
    deallocate (rho, vx, vy, vz, p, mass, momentum_x, momentum_y, momentum_z, &
