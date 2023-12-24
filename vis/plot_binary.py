@@ -6,6 +6,8 @@ import h5py as h5
 plt.style.use('dark_background')
 
 
+available=[ "rho", "vx", "vy", "vz", "p", "mass", "momentum_x", "momentum_y", "momentum_x", "energy", "temperature"]
+
 def plotFile(input):
     var,file,cnt=input
     data=h5.File(file)[var][:]
@@ -29,10 +31,14 @@ def plotFile(input):
 
 if (len(sys.argv)<3):
     print(f"Usage: python3 {sys.argv[0]} <var> <file sequence>")
-    print("\tvar options : rho, vx, vy, vz, p, mass, momentum_x, momentum_y, momentum_x, energy, temperature")
     sys.exit(1)
 re=6378137.0
 var=sys.argv[1]
+if ( not var in available):
+    print(f"Invalid var {var} requested!")
+    print("\tvar options : rho, vx, vy, vz, p, mass, momentum_x, momentum_y, momentum_x, energy, temperature")
+    sys.exit(1)
+
 files=sys.argv[2::]
 pool=Pool(8)
 index=np.arange(0,len(files))
