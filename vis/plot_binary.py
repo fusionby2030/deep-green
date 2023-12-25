@@ -1,67 +1,68 @@
 import numpy as np 
-import sys ,os
+import sys 
 import matplotlib.pyplot as plt
-from multiprocessing import Pool
-import h5py as h5
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-plt.style.use('dark_background')
+from matplotlib import colors as mcolors
+import scienceplots 
+plt.style.use(['science'])
+print(sys.argv, len(sys.argv))
 
+import f90nml 
 
-available=[ "rho", "vx", "vy", "vz", "p", "mass", "momentum_x", "momentum_y", "momentum_x", "energy", "temperature"]
-units={
-        "rho": "kg m^{-3}",
-        "vx" : "m s^{-1}",
-        "vy" : "m s^{-1}",
-        "vz" : "m s^{-1}",
-        "p" :  "kg m s^{-1}", 
-        "mass" :"kg",
-        "momentum_x" :"kg m s^{-1}",
-        "momentum_y": "kg m s^{-1}",
-        "momentum_x": "kg m s^{-1}",
-        "energy" : "J m^{-3}",
-        "temperature":"C"
-        }
+with open('./run/conductive_input.nml', 'r') as file: 
+    nml = f90nml.read(file)
+Nx, Ny, Nz, nGhosts = nml['greenhouse']['Nx'], nml['greenhouse']['Ny'], nml['greenhouse']['Nz'], nml['greenhouse']['nGhosts']
+ds, dt,simrealtime = nml['simulation']['ds'], nml['simulation']['dt'], nml['simulation']['simrealtime']
 
-def plotFile(input):
-    var,file,cnt=input
-    data=h5.File(file)[var][:]
-    data=data[2:-2,2:-2,2:-2]
-    nx,ny,nz=np.shape(data)
-    print(nx,ny,nz)
-    fig, (ax1, ax2) = plt.subplots(1, 2)
-    fig.suptitle(f"Y and Z slices of {var}")
-    im1=ax1.imshow(data[:,:,nz//2],cmap="gist_heat")
-    im2=ax2.imshow(data[:,ny//2,:],cmap="gist_heat")
-    # ax1.set_title(f"{var}, Z = 0 slice")
-    # ax2.set_title(f"{var}, Y = 0 slice")
-    ax1.set_xlabel("x")
-    ax1.set_ylabel("y")
-    ax2.set_xlabel("x")
-    ax2.set_ylabel("z")
-    divider1 = make_axes_locatable(ax1)
-    divider2 = make_axes_locatable(ax2)
-    cax1 = divider1.append_axes('right', size='5%', pad=0.05)
-    cax2 = divider2.append_axes('right', size='5%', pad=0.05)
-    cb1=fig.colorbar(im1, cax=cax1)
-    cb2=fig.colorbar(im2, cax=cax2)
-    cb1.ax.set_title(f"${units[var]}$ ")
-    cb2.ax.set_title(f"${units[var]}$ ")
-    plt.tight_layout()
-    plt.savefig(var+"_"+str(cnt).zfill(7)+".png")
-    plt.close()
+if len(sys.argv) == 2:
+    grid = np.fromfile(sys.argv[1], dtype=np.float64)
+    grid = grid.reshape((Nz+2*nGhosts, Ny+2*nGhosts, Nx+2*nGhosts))
+    vmin = min(grid.min(), grid.min())
+    vmax = max(grid.max(), grid.max())
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+    fig, axs = plt.subplots(2, 2, figsize=(8, 8), dpi=200)
+    axs = axs.ravel()
+    for n, Z_index in enumerate([int(i*Nz//4) for i in range(4)]): 
+        cax = axs[n].imshow(grid[Z_index+1, :, :], extent=[0, Nx*ds, Ny*ds, 0], norm=norm)
+        axs[n].set_title(f'Z={Z_index*ds:.2}m')#  @ {simrealtime/(60.0*60.0):.3}h')
+    fig.colorbar(cax, ax=axs.ravel().tolist(), location='right')
+    plt.show()
 
+elif len(sys.argv) == 3:
+    grid0 = np.fromfile(sys.argv[1], dtype=np.float64)
+    grid0 = grid0.reshape((128, 128, 128)).T
 
-if (len(sys.argv)<3):
-    print(f"Usage: python3 {sys.argv[0]} <var> <file sequence>")
-    sys.exit(1)
-re=6378137.0
-var=sys.argv[1]
-if ( not var in available):
-    print(f"Invalid var {var} requested!")
-    print("\tvar options : rho, vx, vy, vz, p, mass, momentum_x, momentum_y, momentum_x, energy, temperature")
-    sys.exit(1)
+    gridt = np.fromfile(sys.argv[2], dtype=np.float64)
+    gridt = gridt.reshape((128, 128, 128)).T
 
-files=sys.argv[2::]
-pool=Pool(8)
-index=np.arange(0,len(files))
-pool.map(plotFile,zip(np.repeat(var,len(index)),files,index))
+    vmin = min(grid0.min(), gridt.min())
+    vmax = max(grid0.max(), gridt.max())
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+    fig, axs= plt.subplots(1, 2, figsize=(10, 5))
+    cax = axs[0].imshow(grid0[:, :, 64], norm=norm)
+    cax2 = axs[1].imshow(gridt[:, :, 64], norm=norm)
+    fig.colorbar(cax2, ax=axs.ravel().tolist(), location='right')
+    plt.show()
+
+elif len(sys.argv) == 4:
+    """ plot a 1d slice of the grid for 6 different z coordinates"""
+
+    grid0 = np.fromfile(sys.argv[1], dtype=np.float64)
+    grid0 = grid0.reshape((128, 128, 128)).T
+
+    gridt = np.fromfile(sys.argv[2], dtype=np.float64)
+    gridt = gridt.reshape((128, 128, 128)).T
+
+    vmin = min(grid0.min(), gridt.min())
+    vmax = max(grid0.max(), gridt.max())
+    norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
+
+    fig, axs= plt.subplots(2, 3, figsize=(10, 5))
+    axs = axs.ravel()
+    for n, i in enumerate([i*(128//5) for i in range(6)]):
+
+        cax = axs[n].imshow(gridt[:, :, i], norm=norm)
+        axs[n].set_title(f"z = {i}")
+
+    fig.colorbar(cax, ax=axs.ravel().tolist(), location='right')
+    plt.show() 
