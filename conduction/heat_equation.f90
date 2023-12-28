@@ -239,7 +239,7 @@ PROGRAM conductive_heat
     REAL(RK) :: dx, dt, wall_thickness, simrealtime, computer_power, outside_temperature
     REAL(RK), PARAMETER :: epsilon=1e-4 ! convergence criteria
     character(len=1000) :: filepath
-    filepath = '/home/kitadam/Uni/2023/Sci_Computing_II/final_project/deep-green/conductive/run/conductive_input.nml'
+    filepath = '/home/kitadam/Uni/2023/Sci_Computing_II/final_project/deep-green/conduction/run/conductive_input.nml'
     call read_inputs(filepath, Nx, Ny, Nz,nGhosts, wall_thickness, computer_power, outside_temperature,& 
                                dt, dx, simrealtime, saveinterval)
     ALLOCATE(T(Nx+2*nGhosts, Ny+2*nGhosts, Nz+2*nGhosts), T_new(Nx+2*nGhosts, Ny+2*nGhosts, Nz+2*nGhosts), & 
