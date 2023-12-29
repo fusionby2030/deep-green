@@ -3,9 +3,9 @@
     Ny = 36
     Nz = 40
     nGhosts = 1
-    wall_thickness = 0.02
-    computer_power = 500.0 
-    outside_temperature = 0.0
+    wall_thickness = 0.001
+    computer_power = 400.0 
+    outside_temperature = -10.0
 /
 
 &simulation

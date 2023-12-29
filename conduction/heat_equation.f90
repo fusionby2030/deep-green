@@ -43,6 +43,12 @@ MODULE global
     REAL(rk), PARAMETER :: thermal_diffusivity_plastic = thermal_condctivity_plastic / (density_plastic * specific_heat_plastic) ! m^3/s
     ! https://en.wikipedia.org/wiki/Polycarbonate
 
+    ! yellow pine
+    REAL(RK), PARAMETER :: thermal_conductivity_wood = 0.15_rk ! W/(m*K)
+    REAL(RK), PARAMETER :: density_wood = 640.0_rk             ! kg/m^3
+    REAL(RK), PARAMETER :: specific_heat_wood = 2805.0_rk      ! J/(kg*K)
+    REAL(RK), PARAMETER :: thermal_diffusivity_wood = thermal_conductivity_wood / (density_wood * specific_heat_wood) ! m^3/s
+    REAL(RK), PARAMETER :: wood_thickness = 0.02_rk            ! m
 END MODULE global
 
 MODULE io
@@ -158,6 +164,53 @@ MODULE physics
     IMPLICIT NONE
     CONTAINS
     !-----------------------------------------------------------------------
+    ! SUBROUTINE: get_diffusivity_grid
+    ! Purpose: Diffusivity grid for the greenhouse, so we do not need to branch in main loop
+    ! The diffusivity grid is the same size as the temperature grid
+    ! The bottom z-layer is wood 
+    ! the rest is plastic 
+    !-----------------------------------------------------------------------
+    SUBROUTINE get_diffusivity_grid(diffusivity_grid, Nx, Ny, Nz, nGhosts)
+        REAL(RK), DIMENSION(:, :, :), INTENT(INOUT) :: diffusivity_grid
+        INTEGER(IK), INTENT(IN) :: Nx, Ny, Nz, nGhosts
+        diffusivity_grid = thermal_diffusivity_air
+        ! plastic border
+        diffusivity_grid(nGhosts+1:Nx+1:Nx-1, nGhosts+1:Ny+1, nGhosts+1:Nz+1) = thermal_diffusivity_plastic
+        diffusivity_grid(nGhosts+1:Nx+1, nGhosts+1:Ny+1:Ny-1, nGhosts+1:Nz+1) = thermal_diffusivity_plastic
+        diffusivity_grid(nGhosts+1:Nx+1, nGhosts+1:Ny+1, nGhosts+1:Nz+1:Nz-1) = thermal_diffusivity_plastic
+        ! replace small component where computers are with air 
+        diffusivity_grid(1+nGhosts:Nx/2, 1:1+nGhosts, :) = thermal_diffusivity_air
+
+        ! replace bottom z layer as wood 
+        diffusivity_grid(nGhosts+1:Nx+1, nGhosts+1:Ny+1, nGhosts+1) = thermal_diffusivity_wood
+        print *, thermal_diffusivity_wood, thermal_diffusivity_plastic, thermal_diffusivity_air
+    END SUBROUTINE get_diffusivity_grid
+
+    !-----------------------------------------------------------------------
+    ! SUBROUTINE: get_wall_thickness_grid 
+    ! Purpose: Wall thickness grid for the greenhouse, so we do not need to branch in main loop
+    ! The wall thickness grid is the same size as the temperature grid
+    ! The bottom z-layer is wood, i.e., 0.2 m 
+    ! the border is plastic 
+    ! the rest is ds, or the grid size
+    !-----------------------------------------------------------------------
+    SUBROUTINE get_wall_thickness_grid(wall_thickness_grid, Nx, Ny, Nz, nGhosts, ds, wall_thickness)
+        REAL(RK), DIMENSION(:, :, :), INTENT(INOUT) :: wall_thickness_grid
+        INTEGER(IK), INTENT(IN) :: Nx, Ny, Nz, nGhosts
+        REAL(RK), INTENT(IN) :: wall_thickness, ds
+        wall_thickness_grid = ds
+        wall_thickness_grid(nGhosts+1:Nx+1:Nx-1, nGhosts+1:Ny+1, nGhosts+1:Nz+1) = wall_thickness
+        wall_thickness_grid(nGhosts+1:Nx+1, nGhosts+1:Ny+1:Ny-1, nGhosts+1:Nz+1) = wall_thickness
+        wall_thickness_grid(nGhosts+1:Nx+1, nGhosts+1:Ny+1, nGhosts+1:Nz+1:Nz-1) = wall_thickness
+        ! replace small component where computers are with ds 
+        wall_thickness_grid(1+nGhosts:Nx/2, 1:1+nGhosts, :) = ds
+
+        ! replace bottom z layer as wood 
+        wall_thickness_grid(nGhosts+1:Nx+1, nGhosts+1:Ny+1, nGhosts+1) = wood_thickness
+    END SUBROUTINE get_wall_thickness_grid
+
+
+    !-----------------------------------------------------------------------
     ! SUBROUTINE: get_source_grid
     ! Purpose: Calculate the source grid for the heat equation
     ! Sources should be in W/m^3
@@ -177,7 +230,7 @@ MODULE physics
 
         sources = 0.0_rk
 
-        sources(1+nGhosts:Nx/2, 1:1+nGhosts, :) = computer_power_density_per_grid
+        sources(1+nGhosts:Nx/2, 1:1+nGhosts, nGhosts+1:) = computer_power_density_per_grid
         ! sources(lamp_x:lamp_x+lamp_len_x, lamp_y:lamp_y+lamp_len_y, lamp_z:lamp_z+lamp_len_z) = lamp_power_density
         
         DO k=1, Nz+nGhosts
@@ -197,30 +250,35 @@ MODULE physics
     ! Purpose: Calculate the new temperature of grid using the heat equation
     ! Direchlet boundary conditions are used for the walls, i.e., ghost points not updated
     !-----------------------------------------------------------------------
-    SUBROUTINE conductive_heat_transfer(T, T_new, Nx, Ny, Nz, nGhosts, dt, ds, sources, wall_thickness)
-        REAL(RK), DIMENSION(:, :, :), INTENT(IN) :: T, sources
+    SUBROUTINE conductive_heat_transfer(T, T_new, Nx, Ny, Nz, nGhosts, dt, ds, sources, wall_thickness_grid, diffusivity_grid)
+        REAL(RK), DIMENSION(:, :, :), INTENT(IN) :: T, sources, diffusivity_grid, wall_thickness_grid
         REAL(RK), DIMENSION(:, :, :), INTENT(INOUT) :: T_new
         INTEGER(IK), INTENT(IN) :: Nx, Ny, Nz, nGhosts
-        REAL(RK), INTENT(IN) :: dt, ds, wall_thickness
+        REAL(RK), INTENT(IN) :: dt, ds
         INTEGER(IK) :: i, j, k
         DO k = 1+Nghosts, Nz+nGhosts
             DO j = 1+Nghosts, Ny+nGhosts
                 DO i = 1+Nghosts, Nx+nGhosts
-                    if (i == 1+nGhosts .OR. i==Nx+nGhosts .OR.& 
-                        j==1+nGhosts .OR. j==Ny+nGhosts .OR.&
-                        k==1+nGhosts .OR. k==Nz+nGhosts) then
-                            T_new(i, j, k) = T(i, j, k) + (thermal_diffusivity_plastic*dt)*( & 
-                                                (T(i+1, j, k) - 2*T(i, j, k) + T(i-1, j, k) + &
-                                                   T(i, j+1, k) - 2*T(i, j, k) + T(i, j-1, k) + &
-                                                T(i, j, k+1) - 2*T(i, j, k) + T(i, j, k-1))/(wall_thickness**2) + & 
-                                                sources(i, j, k)* (ds**2/ (thermal_condctivity_air)))! + &
-                    else 
-                    T_new(i, j, k) = T(i, j, k) + (thermal_diffusivity_air*dt)*( & 
+                    T_new(i, j, k) = T(i, j, k) + (diffusivity_grid(i, j, k)*dt)*( & 
                                                     (T(i+1, j, k) - 2*T(i, j, k) + T(i-1, j, k) + &
                                                    T(i, j+1, k) - 2*T(i, j, k) + T(i, j-1, k) + &
-                                                   T(i, j, k+1) - 2*T(i, j, k) + T(i, j, k-1))/(ds**2) + &
+                                                   T(i, j, k+1) - 2*T(i, j, k) + T(i, j, k-1))/(wall_thickness_grid(i,j,k)**2) + &
                                                     sources(i, j, k)* (ds**2/ (thermal_condctivity_air)))
-                    end if                            
+                    !if (i == 1+nGhosts .OR. i==Nx+nGhosts .OR.& 
+                    !    j==1+nGhosts .OR. j==Ny+nGhosts .OR.&
+                    !    k==1+nGhosts .OR. k==Nz+nGhosts) then
+                    !        T_new(i, j, k) = T(i, j, k) + (thermal_diffusivity_plastic*dt)*( & 
+                    !                            (T(i+1, j, k) - 2*T(i, j, k) + T(i-1, j, k) + &
+                    !                               T(i, j+1, k) - 2*T(i, j, k) + T(i, j-1, k) + &
+                    !                            T(i, j, k+1) - 2*T(i, j, k) + T(i, j, k-1))/(wall_thickness**2) + & 
+                    !                            sources(i, j, k)* (ds**2/ (thermal_condctivity_air)))! + &
+                    !else 
+                    !T_new(i, j, k) = T(i, j, k) + (thermal_diffusivity_air*dt)*( & 
+                    !                                (T(i+1, j, k) - 2*T(i, j, k) + T(i-1, j, k) + &
+                    !                               T(i, j+1, k) - 2*T(i, j, k) + T(i, j-1, k) + &
+                    !                               T(i, j, k+1) - 2*T(i, j, k) + T(i, j, k-1))/(ds**2) + &
+                    !                                sources(i, j, k)* (ds**2/ (thermal_condctivity_air)))
+                    !end if                            
                 END DO
             END DO
         END DO
@@ -233,17 +291,18 @@ PROGRAM conductive_heat
     use initialization
     use physics 
     IMPLICIT NONE 
-    REAL(RK), DIMENSION(:, :, :), ALLOCATABLE :: T, T_new, sources
+    REAL(RK), DIMENSION(:, :, :), ALLOCATABLE :: T, T_new, sources, ds_grid, diffusivity_grid 
     INTEGER(IK) :: Nx, Ny, Nz, nGhosts
     INTEGER(ik) :: timestep=1, saveinterval
     REAL(RK) :: dx, dt, wall_thickness, simrealtime, computer_power, outside_temperature
-    REAL(RK), PARAMETER :: epsilon=1e-4 ! convergence criteria
+    REAL(RK), PARAMETER :: epsilon=1.5e-4 ! convergence criteria
     character(len=1000) :: filepath
     filepath = '/home/kitadam/Uni/2023/Sci_Computing_II/final_project/deep-green/conduction/run/conductive_input.nml'
     call read_inputs(filepath, Nx, Ny, Nz,nGhosts, wall_thickness, computer_power, outside_temperature,& 
                                dt, dx, simrealtime, saveinterval)
     ALLOCATE(T(Nx+2*nGhosts, Ny+2*nGhosts, Nz+2*nGhosts), T_new(Nx+2*nGhosts, Ny+2*nGhosts, Nz+2*nGhosts), & 
-                sources(Nx+2*nGhosts, Ny+2*nGhosts, Nz+2*nGhosts))
+                sources(Nx+2*nGhosts, Ny+2*nGhosts, Nz+2*nGhosts), ds_grid(Nx+2*nGhosts, Ny+2*nGhosts, Nz+2*nGhosts), &
+                diffusivity_grid(Nx+2*nGhosts, Ny+2*nGhosts, Nz+2*nGhosts))
     
     ! Initial temperature around outside temperature
     T = outside_temperature + 2.0_rk + c_to_k
@@ -259,12 +318,15 @@ PROGRAM conductive_heat
     
     T_new = T
     CALL get_source_grid(sources, Nx, Ny, Nz, dx, nGhosts, computer_power)
-
+    CALL get_diffusivity_grid(diffusivity_grid, Nx, Ny, Nz, nGhosts)
+    call get_wall_thickness_grid(ds_grid, Nx, Ny, Nz, nGhosts, dx, wall_thickness)
     CALL write_grid(T + k_to_c, 'T0.dat')
     CALL write_grid(sources, 'sources.dat')
+    CALL write_grid(ds_grid, 'thickness.dat' )
+    CALL write_grid(diffusivity_grid, 'diffusivity.dat')
     do while (timestep*dt < simrealtime) 
         timestep = timestep + 1
-        CALL conductive_heat_transfer(T, T_new, Nx, Ny, Nz, nGhosts, dt, dx, sources, wall_thickness)
+        CALL conductive_heat_transfer(T, T_new, Nx, Ny, Nz, nGhosts, dt, dx, sources, ds_grid, diffusivity_grid)
         if (maxval(abs(T_new-T)) < epsilon) then 
             print *, "converged, exiting"
             exit 
@@ -277,6 +339,6 @@ PROGRAM conductive_heat
         
     end do 
     CALL write_grid(T + k_to_c, 'T.dat')
-    DEALLOCATE(T, T_new, sources)
+    DEALLOCATE(T, T_new, sources, ds_grid, diffusivity_grid)
 
 END PROGRAM conductive_heat
