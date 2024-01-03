@@ -102,7 +102,7 @@ def drive():
     
     time = 0.0
     time_max = 1.0
-
+    converged = 0 
     # setup arrays 
     T_cond, T_euler, sources, rho, p, vx, vy, vz = initialize_everything(config, nGhosts_cond, nGhosts_euler)
 
@@ -112,7 +112,7 @@ def drive():
 
         T_cond, sources, rho, p, vx, vy, vz = set_all_arrays_as_fortran(T_cond, sources, rho, p, vx, vy, vz)  
         print('Condctive step')
-        dr.run_conductive(T_cond, Nx, Ny, Nz, nGhosts_cond, dt, ds, sources, wall_thickness, time_max)
+        dr.run_conductive(T_cond, Nx, Ny, Nz, nGhosts_cond, dt, ds, sources, wall_thickness, time_max, converged)
         
         # copy the T cond temperature except for the border 
         T_euler[nGhosts_euler:Nx+nGhosts_euler, nGhosts_euler:Ny+nGhosts_euler, nGhosts_euler:Nz+nGhosts_euler] = T_cond[1:-1, 1:-1, 1:-1]

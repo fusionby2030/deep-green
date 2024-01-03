@@ -26,5 +26,12 @@ The input file can be modified in `run/conductive_input.nml`
 
 0. `cd coupled && mkdir results`
 1. `python3 -m numpy.f2py  -c drivers.f90 -m driver --fcompiler=gfortran --f90flags='-O3 -ffree-line-length-none'`
-2. `python3 main.py`
+2. `python3 main.py run/*.yaml`
 
+### Scalings 
+
+0. `cd scalings`
+1. `'./chmod +x generate_configs.sh`
+2. `python3 -m numpy.f2py  -c drivers.f90 -m driver --fcompiler=gfortran --f90flags='-O3 -ffree-line-length-none'`
+2. `mkdir results`
+3. 

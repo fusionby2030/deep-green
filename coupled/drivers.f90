@@ -642,7 +642,7 @@ MODULE physics
       end select
    end subroutine apply_boundary_conditions
 end module physics
-SUBROUTINE run_conductive(T, Nx, Ny, Nz, nGhosts, dt, ds, sources, wall_thickness, t_max)
+SUBROUTINE run_conductive(T, Nx, Ny, Nz, nGhosts, dt, ds, sources, wall_thickness, t_max, converged)
     use types_and_kinds
     use global 
     ! use initialization 
@@ -653,6 +653,7 @@ SUBROUTINE run_conductive(T, Nx, Ny, Nz, nGhosts, dt, ds, sources, wall_thicknes
     REAL(rk), INTENT(INOUT), DIMENSION(:, :, :) :: T
     REAL(rk), ALLOCATABLE, DIMENSION(:, :, :) :: T_new, ds_grid, diffusivity_grid
     REAL(rk), INTENT(IN) :: dt, ds, wall_thickness, t_max
+    INTEGER(ik), INTENT(INOUT) :: converged
     INTEGER :: timestep=0
     REAL :: epsilon = 0.000001
     allocate(T_new(Nx+2*nGhosts, Ny+2*nGhosts, Nz+2*nGhosts),  & 
@@ -671,11 +672,13 @@ SUBROUTINE run_conductive(T, Nx, Ny, Nz, nGhosts, dt, ds, sources, wall_thicknes
         CALL conductive_heat_transfer(T, T_new, Nx, Ny, Nz, nGhosts, dt, ds, sources, &
                              ds_grid, diffusivity_grid)
         if (maxval(abs(T_new-T)) < epsilon) then 
+            converged = 1_ik 
             print *, "converged, exiting"
             exit 
         end if
         T = T_new
-        timestep = timestep + 1         
+        timestep = timestep + 1 
+        converged = 0_ik
     end do 
     T = T + k_to_c
     print *, "Finised Conductive", maxval(T)
