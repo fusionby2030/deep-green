@@ -48,7 +48,7 @@ program euler_cfd
       vx_xtr, vy_xtr, vz_xtr, p_xtr
 
    integer(ik), parameter :: xcells = 128, &
-                             ycells = 8, &
+                             ycells = 6, &
                              zcells = 256, &
                              nGhosts = 2
    integer(ik), parameter :: nx = xcells + 2*nGhosts, ny = ycells + 2*nGhosts, nz = zcells + 2*nGhosts
@@ -89,13 +89,12 @@ program euler_cfd
    shiftx(1) = 1
    shifty(2) = 1
    shiftz(3) = 1
-
    !Set an initial state
    !call init_Uniform(rho, vx, vy, vz, p,101000.0_rk, 293.0_rk)
    !call init_Equilibrium(rho,vx,vy,vz,p, nx, ny, nz, nGhosts,ds,101000.0_rk,293.0_rk)
-   !call init_Kelvin_Helmholtz(rho,vx,vy,vz,p, nx, ny, nz, nGhosts,ds)
-   call init_Thermal_Rising_Bubble(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, ds, cx, cy, cz, 32._rk, 28._rk, 101000.0_rk, 293.0_rk)
-   ! call init_adam_bubble(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, ds, cx, cy, cz, 16._rk, 14._rk, 101000.0_rk, 293.0_rk)
+   ! call init_Kelvin_Helmholtz(rho,vx,vy,vz,p, nx, ny, nz, nGhosts,ds)
+   ! call init_Thermal_Rising_Bubble(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, ds, cx, cy, cz, 32._rk, 28._rk, 101000.0_rk, 293.0_rk)
+   call init_adam_bubble(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, ds, cx, cy, cz, 16._rk, 14._rk, 101000.0_rk, 293.0_rk)
 
    call update_primitive_ghosts(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, BCs)
    call conservative(mass, momentum_x, momentum_y, momentum_z, energy, rho, p, vx, vy, vz, temp, ds)
