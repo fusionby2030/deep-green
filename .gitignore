@@ -2,5 +2,9 @@
 src/*h5
 src/build
 tags
+/docs/
+*.dat
+*.out
+*.mod
 vis/*png
 
