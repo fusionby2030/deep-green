@@ -1,6 +1,14 @@
-
+*h5
+*.npy
+*.vtr
+/stack/
 src/*h5
 src/build
 tags
+/docs/
+*.dat
+*.out
+*.mod
 vis/*png
 
+scaling*

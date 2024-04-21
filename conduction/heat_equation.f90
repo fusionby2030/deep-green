@@ -288,9 +288,10 @@ PROGRAM conductive_heat
     INTEGER(ik) :: timestep=1, saveinterval
     REAL(RK) :: dx, dt, wall_thickness, simrealtime, computer_power, outside_temperature
     REAL(RK), PARAMETER :: epsilon=1.5e-4 ! convergence criteria
-    character(len=1000) :: filepath
-    filepath = '/home/kitadam/Uni/2023/Sci_Computing_II/final_project/deep-green/conduction/run/conductive_input.nml'
-    call read_inputs(filepath, Nx, Ny, Nz,nGhosts, wall_thickness, computer_power, outside_temperature,& 
+    character(len=1000) :: infilepath
+    call get_command_argument(1, infilepath)
+    ! filepath = '/home/kitadam/Uni/2023/Sci_Computing_II/final_project/deep-green/conduction/run/conductive_input.nml'
+    call read_inputs(infilepath, Nx, Ny, Nz,nGhosts, wall_thickness, computer_power, outside_temperature,& 
                                dt, dx, simrealtime, saveinterval)
     ALLOCATE(T(Nx+2*nGhosts, Ny+2*nGhosts, Nz+2*nGhosts), T_new(Nx+2*nGhosts, Ny+2*nGhosts, Nz+2*nGhosts), & 
                 sources(Nx+2*nGhosts, Ny+2*nGhosts, Nz+2*nGhosts), ds_grid(Nx+2*nGhosts, Ny+2*nGhosts, Nz+2*nGhosts), &
@@ -304,10 +305,10 @@ PROGRAM conductive_heat
     T_new = T
 
     ! write initial conditions
-    CALL write_grid(T + k_to_c, 'T0.dat')
-    CALL write_grid(sources, 'sources.dat')
-    CALL write_grid(ds_grid, 'thickness.dat' )
-    CALL write_grid(diffusivity_grid, 'diffusivity.dat')
+    CALL write_grid(T + k_to_c, 'results/T0.dat')
+    CALL write_grid(sources, 'results/sources.dat')
+    CALL write_grid(ds_grid, 'results/thickness.dat' )
+    CALL write_grid(diffusivity_grid, 'results/diffusivity.dat')
 
     ! enter main loop 
     do while (timestep*dt < simrealtime) 
@@ -324,7 +325,7 @@ PROGRAM conductive_heat
         T = T_new
         
     end do 
-    CALL write_grid(T + k_to_c, 'T.dat')
+    CALL write_grid(T + k_to_c, 'results/T.dat')
     DEALLOCATE(T, T_new, sources, ds_grid, diffusivity_grid)
 
 END PROGRAM conductive_heat

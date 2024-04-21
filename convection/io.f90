@@ -202,10 +202,8 @@ contains
       character(32) :: fname
       integer(hid_t) :: file_id
       integer:: error
-      write (fname, '(a,"000",i7.7,a)') "state.", tstep, ".h5"
+      write (fname, '(a,"000",i7.7,a)') "results/state.", tstep, ".h5"
       call create_hdf5file(fname, file_id, error)
-      call open_hdf5file(fname, file_id, error)
-      !call write_real_kind8(file_id, "time", time, error)
       call add_field_h5(file_id, "rho", rho, error, compression_level)
       call add_field_h5(file_id, "vx", vx, error, compression_level)
       call add_field_h5(file_id, "vy", vy, error, compression_level)
