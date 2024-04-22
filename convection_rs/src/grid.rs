@@ -16,6 +16,7 @@ pub mod grid {
         KELVIN_HELMHOLTZ,
         THERMAL_RISING_BUBBLE,
         THERMAL_RISING_BUBBLES,
+        SHOCK_TUBE,
         RAYLEIGH_TAYLOR,
     }
 

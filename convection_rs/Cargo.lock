@@ -549,6 +549,7 @@ dependencies = [
  "hdf5",
  "ndarray",
  "ndarray-stats",
+ "rand",
  "rayon",
  "strum",
  "strum_macros",
