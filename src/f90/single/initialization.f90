@@ -209,5 +209,29 @@ contains
       vy = 0
       vz = 0
    end subroutine init_Uniform
+
+   subroutine init_shock_adam(rho, vx, vy, vz, p, p0, t0, ds, nx, ny, nz, nghosts)
+      real(rk), dimension(:, :, :), intent(inout) :: rho, vx, vy, vz, p
+      real(rk), intent(in) :: p0, t0, ds
+      integer(ik), intent(in) :: nx, ny, nz, nGhosts
+      real(rk) :: zs, total_len 
+      integer :: k, j, i
+      total_len = ny*ds
+      p = p0
+      WRITE(*, *) total_len
+      do k=1, nz
+         do j = 1, ny
+            do i = 1, nx
+               zs = (k)*ds
+               ! write(*, *) zs, sin(zs / total_len) + 1.0
+               rho(i, j, k) = (5*sin(zs / total_len / 1.5 / pi ) + 5.05) * (p(i, j, k)/(rs*t0))
+            end do
+         end do
+      end do
+      vy = 0.0
+      vz = 20.0
+      vx = 0.0
+      
+   END SUBROUTINE init_shock_adam 
 end module initialization
 

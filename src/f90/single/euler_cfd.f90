@@ -66,7 +66,7 @@ program euler_cfd
    BCs(3) = PERIODIC !y-
    BCs(4) = PERIODIC !y-
    BCs(5) = WALL !z-
-   BCs(6) = WALL !z+
+   BCs(6) = OUTFLOW !z+
 
    allocate (rho(nx, ny, nz), vx(nx, ny, nz), vy(nx, ny, nz), vz(nx, ny, nz), p(nx, ny, nz), mass(nx, ny, nz), &
              momentum_x(nx, ny, nz), momentum_y(nx, ny, nz), momentum_z(nx, ny, nz), energy(nx, ny, nz), &
@@ -94,7 +94,8 @@ program euler_cfd
    !call init_Equilibrium(rho,vx,vy,vz,p, nx, ny, nz, nGhosts,ds,101000.0_rk,293.0_rk)
    ! call init_Kelvin_Helmholtz(rho,vx,vy,vz,p, nx, ny, nz, nGhosts,ds)
    ! call init_Thermal_Rising_Bubble(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, ds, cx, cy, cz, 32._rk, 28._rk, 101000.0_rk, 293.0_rk)
-   call init_adam_bubble(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, ds, cx, cy, cz, 16._rk, 14._rk, 101000.0_rk, 293.0_rk)
+   ! call init_adam_bubble(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, ds, cx, cy, cz, 16._rk, 14._rk, 101000.0_rk, 293.0_rk)
+   call init_shock_adam(rho, vx, vy, vz, p, 101000.0_rk, 293.0_rk, ds, nx, ny, nz, nghosts)
 
    call update_primitive_ghosts(rho, vx, vy, vz, p, nx, ny, nz, nGhosts, BCs)
    call conservative(mass, momentum_x, momentum_y, momentum_z, energy, rho, p, vx, vy, vz, temp, ds)
